@@ -1,8 +1,12 @@
 # MVP Acceptance Criteria (DRAFT)
 
-Status: draft for team review. Defines what "done" means for the 24-hour build. Aligned with the data shapes in contracts/api-contracts.md (also draft).
+Status: draft for team review. Defines what "done" means for the 24-hour build.
 
-MVP scope: resume parse, job matches, tailoring, approval gate, roadmap, mock interview. Everything below must be demo-able end to end at the end of the build window.
+Depends on the proposed API contracts, which are not on main yet: they live on branch `docs/api-contracts-draft` (https://github.com/sarthak0116/slate/compare/main...docs/api-contracts-draft). This spec follows those draft shapes; if the contract proposal changes, update this in the same review round.
+
+Product surfaces: website, CLI, and mobile frontend are all required. How much depth fits the 24-hour window across all three is unresolved and is the owner's scoping call, not decided in this doc.
+
+MVP feature scope: resume parse, job matches, tailoring, approval gate, roadmap, mock interview. Everything below must be demo-able end to end at the end of the build window.
 
 ## A. Resume upload and parse
 
@@ -42,9 +46,10 @@ MVP scope: resume parse, job matches, tailoring, approval gate, roadmap, mock in
 - The feedback endpoint returns summary, weakAreas, and transcriptRef.
 - A later session can reference earlier feedback, showing memory persists across sessions.
 
-## G. CLI parity (stretch)
+## G. CLI and mobile parity
 
-- The CLI calls the same /v1 endpoints for at least resume parse and job matches.
+- The CLI and the mobile frontend are required surfaces, same as the website: each calls the same /v1 endpoints for at least resume parse and job matches.
+- Depth beyond that within the build window is part of the unresolved scoping call noted above.
 
 ## Demo checkpoint
 
@@ -56,3 +61,4 @@ upload resume -> see matches -> tailor a resume -> approve it -> generate roadma
 
 - Which sample resumes and job listings do we preload for the demo?
 - How do we reset demo data between runs?
+- How much CLI and mobile depth is realistic inside 24 hours alongside the website?
