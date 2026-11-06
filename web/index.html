@@ -2,7 +2,7 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Slate</title>
 <style>
-:root{--navy:#14213d;--blue:#2457c5;--line:#e3e7ee;--mut:#5b6678;--bad:#b3261e;--ok:#1b7a43}
+:root{--navy:#14213d;--blue:#2457c5;--line:#e3e7ee;--mut:#5b6678;--bad:#b3261e;--ok:#2457c5}
 *{box-sizing:border-box}body{margin:0;font:16px/1.5 system-ui,sans-serif;color:var(--navy);background:#fff}
 main{max-width:760px;margin:0 auto;padding:24px 16px 64px}
 h1{font-size:28px;margin:0}h1 span{color:var(--blue)}p.sub{color:var(--mut);margin:4px 0 24px}
@@ -10,18 +10,19 @@ section{border:1px solid var(--line);border-radius:12px;padding:16px;margin:0 0 
 section.off{opacity:.45;pointer-events:none}
 h2{font-size:17px;margin:0 0 10px}h2 b{display:inline-block;width:24px;height:24px;border-radius:50%;background:var(--navy);color:#fff;text-align:center;font-size:13px;line-height:24px;margin-right:8px}
 textarea{width:100%;min-height:110px;border:1px solid var(--line);border-radius:8px;padding:10px;font:14px/1.4 ui-monospace,monospace;color:var(--navy)}
+button:disabled{opacity:.35;cursor:not-allowed}.note{color:var(--mut);font-size:14px;margin:0 0 10px}.dirty{color:var(--bad)}
 button{background:var(--navy);color:#fff;border:0;border-radius:8px;padding:9px 14px;font:inherit;cursor:pointer;margin:8px 8px 0 0}
 button.sec{background:#fff;color:var(--navy);border:1px solid var(--navy)}
 .chip{display:inline-block;background:#eef2fb;color:var(--blue);border-radius:99px;padding:2px 10px;margin:2px 4px 2px 0;font-size:14px}
-.job{display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding:10px 0}
+.job{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px 12px;border-top:1px solid var(--line);padding:10px 0}.job>div:first-child{flex:1 1 220px;min-width:0}.job>div:last-child{display:flex;align-items:center;gap:10px;margin-left:auto}.job button{margin:0}
 .job:first-of-type{border-top:0}.job small{color:var(--mut)}.score{font-weight:600;color:var(--blue)}
 .msg{margin-top:8px;font-size:14px}.bad{color:var(--bad)}.ok{color:var(--ok)}
 .tag{display:inline-block;border:1px solid var(--mut);color:var(--mut);border-radius:6px;padding:0 8px;font-size:13px}
-.tag.approved{border-color:var(--ok);color:var(--ok)}.tag.rejected{border-color:var(--bad);color:var(--bad)}
+.tag.approved{border-color:var(--navy);color:#fff;background:var(--navy)}.tag.rejected{border-color:var(--bad);color:var(--bad)}
 li{margin:4px 0}.q{background:#f5f7fb;border-radius:8px;padding:8px 10px;margin-bottom:8px}
 </style></head><body><main>
 <h1>Slate<span>.</span></h1>
-<p class="sub">Resume to approved application draft, with an approval gate you cannot skip. Demo data, runs locally.</p>
+<p class="sub">Local demo of the Slate flow: a demo approval step for application drafts. Automatic checks are simple rules, not fact checking, so a person must review every draft before it is used. No login, sample data only.</p>
 
 <section id="s1"><h2><b>1</b>Your resume</h2>
 <textarea id="resume">Asha Verma
@@ -31,12 +32,14 @@ Skills: Python, Git, Excel, communication</textarea>
 <button id="parse">Parse resume</button><div id="parsed" class="msg"></div></section>
 
 <section id="s2" class="off"><h2><b>2</b>Job matches</h2>
+<p class="note">Demo score = share of a listing's skills found on the resume, over 5 sample listings. The 75% threshold from the deck is not implemented, so nothing here is claimed as a good match.</p>
 <div id="jobs"></div></section>
 
 <section id="s3" class="off"><h2><b>3</b>Draft <span id="status" class="tag">draft</span></h2>
 <label>Resume text</label><textarea id="dres"></textarea>
 <label>Cover note</label><textarea id="dnote"></textarea>
-<div><button id="edit" class="sec">Save edit (needs new approval)</button><button id="approve">Approve</button><button id="reject" class="sec">Reject</button><button id="export" class="sec">Export approved draft</button></div>
+<div id="dirtynote" class="msg dirty" hidden>Unsaved changes. Save the edit first: approve and export only apply to the saved version.</div>
+<div><button id="edit" class="sec">Save edit (needs new approval)</button><button id="approve">Approve saved draft</button><button id="reject" class="sec">Reject</button><button id="export" class="sec">Export approved draft</button></div>
 <div id="dmsg" class="msg"></div></section>
 
 <section id="s4" class="off"><h2><b>4</b>Roadmap</h2>
@@ -53,6 +56,9 @@ async function api(method,path,body){
   const r=await fetch("/v1"+path,{method,headers:{"content-type":"application/json"},body:body?JSON.stringify(body):undefined});
   const j=await r.json(); if(!r.ok) throw new Error(j.error?j.error.message:"Request failed"); return j;
 }
+let savedRes='',savedNote='';
+function refresh(){const dirty=$('dres').value!==savedRes||$('dnote').value!==savedNote;$('dirtynote').hidden=!dirty;['approve','export','reject'].forEach(i=>$(i).disabled=dirty);$('edit').disabled=!dirty}
+$('dres').oninput=$('dnote').oninput=refresh;
 const on=id=>$(id).classList.remove("off");
 function say(id,t,bad){$(id).className="msg "+(bad?"bad":"ok");$(id).textContent=t}
 $("parse").onclick=async()=>{try{
@@ -66,16 +72,16 @@ $("parse").onclick=async()=>{try{
 function setStatus(s){$("status").textContent=s;$("status").className="tag "+s}
 async function tailor(j){try{
   const d=await api("POST","/tailor",{resumeId:rid,jobId:j}); did=d.draftId;
-  $("dres").value=d.tailoredResume;$("dnote").value=d.coverNote;setStatus("draft");
-  say("dmsg","Draft only. Skill gaps for this job: "+(d.skillGaps.join(", ")||"none"));on("s3");
+  $("dres").value=savedRes=d.tailoredResume;$("dnote").value=savedNote=d.coverNote;setStatus("draft");refresh();
+  say("dmsg","Draft only. Skill gaps for this job: "+(d.skillGaps.join(", ")||"none")+". A person must review it before use.");on("s3");
 }catch(e){say("dmsg",e.message,1)}}
 $("edit").onclick=async()=>{try{
   const r=await api("POST","/drafts/"+did+"/edit",{tailoredResume:$("dres").value,coverNote:$("dnote").value});
-  did=r.draftId;setStatus("draft");say("dmsg","Saved as a new draft. It needs its own approval.");
+  did=r.draftId;savedRes=$("dres").value;savedNote=$("dnote").value;setStatus("draft");refresh();say("dmsg","Saved as a new draft. It needs its own approval.");
 }catch(e){say("dmsg",e.message,1)}};
-$("approve").onclick=async()=>{try{const r=await api("POST","/approvals",{draftId:did,decision:"approve"});setStatus(r.status);say("dmsg","Approved.")}catch(e){say("dmsg",e.message,1)}};
+$("approve").onclick=async()=>{try{const r=await api("POST","/approvals",{draftId:did,decision:"approve"});setStatus(r.status);say("dmsg","Saved draft approved in this demo. Review it yourself before using it anywhere.")}catch(e){say("dmsg",e.message,1)}};
 $("reject").onclick=async()=>{try{const r=await api("POST","/approvals",{draftId:did,decision:"reject"});setStatus(r.status);say("dmsg","Rejected. This draft cannot be used.")}catch(e){say("dmsg",e.message,1)}};
-$("export").onclick=async()=>{try{await api("GET","/drafts/"+did+"/export");say("dmsg","Export allowed: draft is approved and passed the claim check.")}catch(e){say("dmsg",e.message,1)}};
+$("export").onclick=async()=>{try{await api("GET","/drafts/"+did+"/export");say("dmsg","Export allowed by the demo gate: this saved version is approved and no rule-detectable unsupported claim was found. Not a fact check; review it yourself.")}catch(e){say("dmsg",e.message,1)}};
 $("road").onclick=async()=>{try{const r=await api("POST","/roadmap",{resumeId:rid,targetRole:"Data Analyst"});
   $("roadlist").innerHTML=r.milestones.map(m=>`<li><b>${esc(m.title)}</b> · ${m.etaWeeks} wk<br><small>${esc(m.why)}</small></li>`).join("")}catch(e){$("roadlist").innerHTML='<li class="bad">'+esc(e.message)+"</li>"}};
 let qs=0;
