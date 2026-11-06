@@ -10,8 +10,7 @@ def parse_resume(text: str) -> dict:
         raise ParseError("Resume text is empty or too short to parse.")
     lines = [l.strip() for l in text.splitlines() if l.strip()]
     name = lines[0] if len(lines[0].split()) <= 5 and "@" not in lines[0] else "Unknown"
-    low = text.lower()
-    skills = [s for s in KNOWN_SKILLS if re.search(r"(?<![a-z+])" + re.escape(s) + r"(?![a-z+])", low)]
+    skills = find_skills(text)
     education, experience = [], []
     for l in lines:
         m = re.search(r"(b\.?tech|m\.?tech|bca|mca|b\.?sc|m\.?sc|bachelor|master)[^,\n]*", l, re.I)
@@ -24,6 +23,11 @@ def parse_resume(text: str) -> dict:
             experience.append({"title": m.group(1).title(), "org": m.group(2).strip(),
                                "months": int(m.group(3)) if m.group(3) else None})
     return {"name": name, "skills": skills, "education": education, "experience": experience}
+
+def find_skills(text: str) -> list:
+    """Known skills named in text, whole-word match, sorted."""
+    low = (text or "").lower()
+    return [s for s in KNOWN_SKILLS if re.search(r"(?<![a-z+])" + re.escape(s) + r"(?![a-z+])", low)]
 
 def _after(line: str, sep: str) -> str:
     return line.split(sep, 1)[1].strip().rstrip(".") if sep in line else ""
