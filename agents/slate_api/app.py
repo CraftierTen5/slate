@@ -1,0 +1,96 @@
+"""HTTP adapter over slate_core, following contracts/api-contracts.md.
+
+Separate from backend/ on purpose (that folder holds the teammate's DB/server setup, PR #4).
+To merge later: mount `router` in backend/main.py, or run this app on its own.
+Run:  uvicorn slate_api.app:app --app-dir agents
+"""
+import os, sys
+from typing import Optional
+from fastapi import APIRouter, FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from slate_core import SlateService, SlateError  # noqa: E402
+
+STATUS = {"resume_not_found": 404, "job_not_found": 404, "draft_not_found": 404, "session_not_found": 404,
+          "resume_unreadable": 422, "invalid_decision": 422, "role_unknown": 404, "mode_unsupported": 422,
+          "draft_not_approved": 403, "draft_rejected": 409, "unsupported_claim": 500}
+
+class ResumeIn(BaseModel):
+    text: str  # plain text for now; PDF upload is an open question in the contract
+
+class TailorIn(BaseModel):
+    resumeId: str
+    jobId: str
+
+class EditIn(BaseModel):
+    tailoredResume: Optional[str] = None
+    coverNote: Optional[str] = None
+
+class RoadmapIn(BaseModel):
+    resumeId: str
+    targetRole: str
+
+class MockIn(BaseModel):
+    targetRole: str
+    mode: str = "text"
+
+class AnswerIn(BaseModel):
+    text: str
+
+class ApprovalIn(BaseModel):
+    draftId: str
+    decision: str
+
+def create_app(service: Optional[SlateService] = None) -> FastAPI:
+    svc = service or SlateService()
+    r = APIRouter(prefix="/v1")
+
+    @r.post("/resume")
+    def resume(b: ResumeIn): return svc.upload_resume(b.text)
+
+    @r.get("/jobs")
+    def jobs(query: str = "", location: str = "", resumeId: Optional[str] = None):
+        return svc.jobs(query, location, resumeId)
+
+    @r.post("/tailor")
+    def tailor(b: TailorIn): return svc.tailor(b.resumeId, b.jobId)
+
+    @r.post("/drafts/{draft_id}/edit")
+    def edit(draft_id: str, b: EditIn):
+        return svc.edit_draft(draft_id, **b.model_dump(exclude_none=True))
+
+    @r.get("/drafts/{draft_id}/export")
+    def export(draft_id: str): return svc.export_draft(draft_id)
+
+    @r.post("/roadmap")
+    def roadmap(b: RoadmapIn): return svc.roadmap(b.resumeId, b.targetRole)
+
+    @r.post("/interview/mock")
+    def mock(b: MockIn): return svc.start_interview(b.targetRole, b.mode)
+
+    @r.post("/interview/{sid}/answer")
+    def answer(sid: str, b: AnswerIn): return svc.answer_interview(sid, b.text)
+
+    @r.get("/interview/{sid}/feedback")
+    def feedback(sid: str): return svc.interview_feedback(sid)
+
+    @r.post("/approvals")
+    def approvals(b: ApprovalIn): return svc.decide(b.draftId, b.decision)
+
+    app = FastAPI(title="Slate API (core adapter)")
+    app.include_router(r)
+
+    @app.exception_handler(SlateError)
+    async def _slate(_: Request, e: SlateError):
+        return JSONResponse(e.to_dict(), status_code=STATUS.get(e.code, 400))
+
+    @app.exception_handler(RequestValidationError)
+    async def _val(_: Request, e: RequestValidationError):
+        return JSONResponse({"error": {"code": "bad_request", "message": "Request body or query is invalid."}}, status_code=422)
+
+    return app
+
+app = create_app()
