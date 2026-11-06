@@ -8,7 +8,7 @@ import os, sys
 from typing import Optional
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -91,6 +91,19 @@ def create_app(service: Optional[SlateService] = None) -> FastAPI:
     async def _val(_: Request, e: RequestValidationError):
         return JSONResponse({"error": {"code": "bad_request", "message": "Request body or query is invalid."}}, status_code=422)
 
+    web = os.path.join(os.path.dirname(__file__), "..", "..", "web", "index.html")
+
+    @app.get("/", include_in_schema=False)
+    def home():
+        return FileResponse(web) if os.path.exists(web) else JSONResponse({"message": "Slate API"})
+
     return app
 
-app = create_app()
+def _default_service():
+    url = os.getenv("SLATE_STATE_URL")  # e.g. sqlite:///slate_state.db or the Postgres DATABASE_URL; unset = in memory
+    if not url:
+        return SlateService()
+    from slate_core.persistence import SqlSnapshot
+    return SlateService(SqlSnapshot(url))
+
+app = create_app(_default_service())
