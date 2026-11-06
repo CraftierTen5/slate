@@ -9,7 +9,7 @@ Kept apart from `backend/` (the DB and server setup in PR #4). To combine later,
 in `backend/main.py` or call `create_app()` there.
 
     pip install fastapi httpx pytest
-    python -m pytest tests -q          # 14 tests
+    python -m pytest tests -q          # 22 tests
     uvicorn slate_api.app:app --app-dir agents
 
 Honest limits:
@@ -17,6 +17,8 @@ Honest limits:
   in the service layer behind HTTP, so a direct API call cannot bypass it, but it resets on restart
   and is not yet backed by the database.
 - Resume upload takes JSON `{"text": ...}`, not a PDF file.
-- The claim check only verifies that skills claimed in the generated draft come from the parsed resume.
-  Text a user edits in later is not re-checked.
+- Claim check is rule based (see agents/slate_core/claims.py): skills, years/months of experience,
+  percentages, GPA values and degrees named in draft text must be backed by the resume. It runs on
+  generate, edit (fails closed, no draft created), approve and export. It does not catch paraphrase,
+  made-up employers or projects in free text. Passing means "no rule-detectable unsupported claim".
 - No auth (an open question in the contract).

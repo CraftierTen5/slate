@@ -57,3 +57,11 @@ def test_empty_query_is_not_a_crash(c):
 def test_claim_check_flags_unbacked_claims():
     parsed = {"skills": ["python"]}
     assert check_claims(parsed, ["python", "sql"]) == ["sql"]
+
+def test_edit_with_unsupported_claim_is_rejected_over_http(c):
+    rid = _rid(c)
+    d = c.post("/v1/tailor", json={"resumeId": rid, "jobId": "job_001"}).json()["draftId"]
+    r = c.post(f"/v1/drafts/{d}/edit", json={"coverNote": "5 years of SQL and Java at Google"})
+    assert r.status_code == 422 and r.json()["error"]["code"] == "unsupported_claim"
+    ok = c.post(f"/v1/drafts/{d}/edit", json={"coverNote": "I use Python and Git."})
+    assert ok.status_code == 200
