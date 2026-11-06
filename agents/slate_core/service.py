@@ -16,11 +16,24 @@ class SlateError(Exception):
         return {"error": {"code": self.code, "message": self.message}}
 
 class SlateService:
-    def __init__(self):
+    def __init__(self, store=None):
         self._resumes = {}
         self._texts = {}
         self.approvals = ApprovalStore()
         self.interviews = InterviewStore()
+        self._store = store
+        if store is not None:
+            st = store.load()
+            if st:
+                self._resumes, self._texts = st["resumes"], st["texts"]
+                self.approvals._drafts, self.approvals._n = st["drafts"], st["draftN"]
+                self.interviews._sessions, self.interviews._n = st["sessions"], st["sessionN"]
+
+    def _persist(self):
+        if self._store is not None:
+            self._store.save({"resumes": self._resumes, "texts": self._texts,
+                              "drafts": self.approvals._drafts, "draftN": self.approvals._n,
+                              "sessions": self.interviews._sessions, "sessionN": self.interviews._n})
 
     def _resume(self, rid):
         r = self._resumes.get(rid)
@@ -41,7 +54,7 @@ class SlateService:
             raise SlateError("unsupported_claim", "Draft makes claims the resume does not support: " + "; ".join(bad))
         return d
 
-    def upload_resume(self, text) -> dict:
+    def _upload_resume(self, text) -> dict:
         try:
             parsed = parse_resume(text)
         except ParseError as e:
@@ -55,7 +68,7 @@ class SlateService:
         skills = self._resume(resume_id)["skills"] if resume_id else []
         return {"jobs": J.search_jobs(query, location, skills)}
 
-    def tailor(self, resume_id, job_id) -> dict:
+    def _tailor(self, resume_id, job_id) -> dict:
         parsed = self._resume(resume_id)
         job = J.get_job(job_id)
         if job is None:
@@ -68,7 +81,7 @@ class SlateService:
         return {"draftId": did, "tailoredResume": d["tailoredResume"], "coverNote": d["coverNote"],
                 "status": "draft", "claimsChecked": d["claims"], "skillGaps": d["gaps"]}
 
-    def edit_draft(self, draft_id, **updates) -> dict:
+    def _edit_draft(self, draft_id, **updates) -> dict:
         old = self.approvals.get(draft_id)
         if old is None:
             raise SlateError("draft_not_found", "No draft with that id.")
@@ -81,7 +94,7 @@ class SlateService:
             raise SlateError("draft_not_found", "No draft with that id.")
         return {"draftId": new_id, "status": "draft"}
 
-    def decide(self, draft_id, decision) -> dict:
+    def _decide(self, draft_id, decision) -> dict:
         if decision == "approve":
             self._check_draft(draft_id)  # re-validate at approval time
         try:
@@ -110,19 +123,54 @@ class SlateService:
             raise SlateError("role_unknown", "No sample listings for that role yet.")
         return {"milestones": ms}
 
-    def start_interview(self, target_role, mode="text") -> dict:
+    def _start_interview(self, target_role, mode="text") -> dict:
         if mode != "text":
             raise SlateError("mode_unsupported", "Only text mode in the MVP.")
         return self.interviews.start(target_role, self.interviews.past_feedback())
 
-    def answer_interview(self, session_id, text) -> dict:
+    def _answer_interview(self, session_id, text) -> dict:
         try:
             return self.interviews.answer(session_id, text)
         except KeyError:
             raise SlateError("session_not_found", "No interview session with that id.")
 
-    def interview_feedback(self, session_id) -> dict:
+    def _interview_feedback(self, session_id) -> dict:
         try:
             return self.interviews.feedback(session_id)
         except KeyError:
             raise SlateError("session_not_found", "No interview session with that id.")
+
+    def upload_resume(self, *a, **k):
+        r = self._upload_resume(*a, **k)
+        self._persist()
+        return r
+
+    def tailor(self, *a, **k):
+        r = self._tailor(*a, **k)
+        self._persist()
+        return r
+
+    def edit_draft(self, *a, **k):
+        r = self._edit_draft(*a, **k)
+        self._persist()
+        return r
+
+    def decide(self, *a, **k):
+        r = self._decide(*a, **k)
+        self._persist()
+        return r
+
+    def start_interview(self, *a, **k):
+        r = self._start_interview(*a, **k)
+        self._persist()
+        return r
+
+    def answer_interview(self, *a, **k):
+        r = self._answer_interview(*a, **k)
+        self._persist()
+        return r
+
+    def interview_feedback(self, *a, **k):
+        r = self._interview_feedback(*a, **k)
+        self._persist()
+        return r
