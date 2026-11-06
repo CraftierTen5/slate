@@ -16,7 +16,7 @@ from slate_core import SlateService, SlateError  # noqa: E402
 
 STATUS = {"resume_not_found": 404, "job_not_found": 404, "draft_not_found": 404, "session_not_found": 404,
           "resume_unreadable": 422, "invalid_decision": 422, "role_unknown": 404, "mode_unsupported": 422,
-          "draft_not_approved": 403, "draft_rejected": 409, "unsupported_claim": 500}
+          "draft_not_approved": 403, "draft_rejected": 409, "unsupported_claim": 422}
 
 class ResumeIn(BaseModel):
     text: str  # plain text for now; PDF upload is an open question in the contract
