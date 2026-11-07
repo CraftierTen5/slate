@@ -48,7 +48,7 @@ class Locations(unittest.TestCase):
         self.assertEqual(normalize_location("Hyderabad; Remote, United States"), "hyderabad")
 
     def test_remote_is_not_rewritten(self):
-        self.assertEqual(normalize_location("Remote, Canada"), "remote")
+        self.assertEqual(normalize_location("Remote, Canada"), "remote, canada")  # region restriction kept
 
     def test_empty(self):
         self.assertEqual(normalize_location(""), "")
@@ -108,7 +108,7 @@ class CrossSourceHint(unittest.TestCase):
     def test_same_company_title_location_hints(self):
         a = listing()
         b = listing(source="ashby", sourceId="abc", title="Data Analyst",
-                    location="Bangalore")  # alias normalizes to bengaluru
+                    location="Bangalore, India")  # alias per part; full location set must match
         hint = cross_source_hint(a, b)
         self.assertIn("possible duplicate", hint)
         self.assertIn("unverified", hint)
