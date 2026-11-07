@@ -101,3 +101,19 @@ class RecheckResiduals(unittest.TestCase):
         just_under = {"source": "s", "sourceId": "1",
                       "updatedAt": (now - timedelta(days=29, hours=12)).isoformat()}
         self.assertEqual(classify_freshness(just_under, PRESENT, now), ACTIVE)
+
+
+class NaiveUpdatedAt(unittest.TestCase):
+    """A naive updatedAt carries no timezone, so its age is unknown - same rule
+    as naive deadlines: never guess. Unknown age is still 'active': the listing
+    was seen in the latest complete refresh."""
+
+    def test_naive_updated_at_is_unknown_age_stays_active(self):
+        now = datetime(2026, 11, 8, tzinfo=timezone.utc)
+        lst = {"source": "s", "sourceId": "1", "updatedAt": "2026-10-01T00:00:00"}
+        self.assertEqual(classify_freshness(lst, PRESENT, now), ACTIVE)
+
+    def test_aware_old_updated_at_is_still_stale(self):
+        now = datetime(2026, 11, 8, tzinfo=timezone.utc)
+        lst = {"source": "s", "sourceId": "1", "updatedAt": "2026-10-01T00:00:00+00:00"}
+        self.assertEqual(classify_freshness(lst, PRESENT, now), STALE)
