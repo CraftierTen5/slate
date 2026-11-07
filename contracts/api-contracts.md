@@ -47,7 +47,10 @@ Response:
     "title": "Data Analyst",
     "company": "ExampleCo",
     "location": "Indore",
-    "matchScore": 0.82,
+    "matchScore": 0.67,
+    "matchedSkills": ["python", "sql"],
+    "missingSkills": ["statistics"],
+    "reason": "Matches 2 of 3 required skills: python, sql. Missing: statistics.",
     "deadline": "2026-11-30",
     "url": "https://..."
   }]
@@ -55,6 +58,8 @@ Response:
 ```
 
 `matchScore` is 0-1, computed by the matching agent. Sample listings are fine until a real jobs source is chosen.
+
+`matchedSkills`, `missingSkills` and `reason` explain the score: which of the listing's required skills the resume has, which it lacks, and one plain sentence combining the two. They are additive - older consumers can ignore them. Without a `resumeId`, `matchedSkills` is empty and `missingSkills` lists every required skill.
 
 ### 3. Tailoring
 
