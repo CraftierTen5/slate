@@ -111,12 +111,16 @@ def _age_days(iso_ts, now):
         return None
     if then.tzinfo is None:
         then = then.replace(tzinfo=timezone.utc)
-    return (now - then).days
+    # Fractional days: flooring to whole days would keep a listing "active"
+    # for up to a day past the stale cutoff.
+    return (now - then).total_seconds() / 86400
 
 
 def classify_freshness(listing, observed, now, stale_after_days=STALE_AFTER_DAYS):
     """Map a refresh observation to a freshness state. `listing` is the stored
     normalized listing, `now` a timezone-aware datetime for deterministic tests."""
+    if now.tzinfo is None:
+        raise ValueError("now must be timezone-aware")
     # DEADLINE_PASSED observations should come from deadline_passed() above so
     # timezone-naive or unparseable deadlines never reach here as "closed".
     if observed == SOURCE_CLOSED or observed == DEADLINE_PASSED:
@@ -143,9 +147,10 @@ def cross_source_hint(a, b):
     if a.get("source") is None or b.get("source") is None or a.get("source") == b.get("source"):
         return None  # same source: distinct sourceIds are distinct requisitions
     places_a, places_b = location_candidates(a.get("location")), location_candidates(b.get("location"))
+    company_a, title_a = _canon(a.get("company")), _canon(a.get("title"))
     if (places_a and set(places_a) == set(places_b)
-            and _canon(a.get("company")) == _canon(b.get("company"))
-            and _canon(a.get("title")) == _canon(b.get("title"))):
+            and company_a and company_a == _canon(b.get("company"))
+            and title_a and title_a == _canon(b.get("title"))):
         return ("possible duplicate of %s/%s (unverified - separate requisitions "
-                "can share title and location)" % (b["source"], b["sourceId"]))
+                "can share title and location)" % (b.get("source", "?"), b.get("sourceId", "?")))
     return None
