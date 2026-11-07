@@ -1,9 +1,10 @@
 """Tailoring with a claim check: every skill the draft claims must come from the parsed resume."""
+from .jobs import skill_breakdown, _norm
 
 def build_draft(parsed: dict, job: dict) -> dict:
-    have = set(parsed["skills"])
-    matched = [s for s in job["skills"] if s in have]
-    missing = [s for s in job["skills"] if s not in have]
+    # Same matching as the match explanation (jobs.py): case/whitespace ignored,
+    # a repeated required skill counts once, the job's own wording is kept.
+    matched, missing = skill_breakdown(parsed["skills"], job["skills"])
     name = parsed["name"]
     resume = [f"{name}", f"Target role: {job['title']} at {job['company']}", "",
               "Relevant skills: " + (", ".join(matched) if matched else "none listed yet")]
@@ -17,6 +18,6 @@ def build_draft(parsed: dict, job: dict) -> dict:
     return {"tailoredResume": "\n".join(resume), "coverNote": note, "claims": matched, "gaps": missing}
 
 def check_claims(parsed: dict, claims: list) -> list:
-    """Return claims that are NOT backed by the resume."""
-    have = set(parsed["skills"])
-    return [c for c in claims if c not in have]
+    """Return claims that are NOT backed by the resume (same normalization as matching)."""
+    have = {_norm(s) for s in parsed["skills"]}
+    return [c for c in claims if _norm(c) not in have]
