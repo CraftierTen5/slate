@@ -1,0 +1,1051 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Slate • Enterprise Voice Assessment</title>
+  <style>
+    :root {
+      --bg: #0b1120;
+      --card: #131d33;
+      --card-border: #1e293b;
+      --navy: #0f172a;
+      --blue: #38bdf8;
+      --blue-sub: #0284c7;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --green: #10b981;
+      --amber: #f59e0b;
+      --red: #ef4444;
+      --purple: #a855f7;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      background: rgba(19, 29, 51, 0.85);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--card-border);
+      padding: 12px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 18px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .brand span { color: var(--blue); }
+    .badge {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 3px 8px;
+      border-radius: 99px;
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--blue);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+    }
+    .nav-links a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 13px;
+      margin-left: 16px;
+      transition: color 0.2s;
+    }
+    .nav-links a:hover { color: #fff; }
+    main {
+      flex: 1;
+      max-width: 1200px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 24px 16px 64px;
+    }
+    /* Steps / Screens */
+    .screen { display: none; }
+    .screen.active { display: block; }
+
+    /* Card styling */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+    }
+
+    /* Screen 1: Tech Setup */
+    .setup-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      margin-top: 20px;
+    }
+    @media(max-width: 768px) {
+      .setup-grid { grid-template-columns: 1fr; }
+    }
+    .video-preview-box {
+      background: #070d19;
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      overflow: hidden;
+      aspect-ratio: 16/9;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .mic-level-container {
+      margin-top: 14px;
+    }
+    .level-bar {
+      height: 8px;
+      background: #1e293b;
+      border-radius: 99px;
+      overflow: hidden;
+      margin-top: 6px;
+    }
+    .level-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--green), var(--amber));
+      transition: width 0.08s linear;
+    }
+    select, input, button {
+      font-family: inherit;
+    }
+    .form-group {
+      margin-bottom: 16px;
+    }
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      font-weight: 500;
+    }
+    select {
+      width: 100%;
+      background: #0f172a;
+      border: 1px solid var(--card-border);
+      color: var(--text);
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+    .btn {
+      background: var(--blue-sub);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 11px 18px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+    .btn:hover { background: #0369a1; }
+    .btn.sec {
+      background: #1e293b;
+      color: var(--text);
+      border: 1px solid var(--card-border);
+    }
+    .btn.sec:hover { background: #334155; }
+    .btn.red { background: var(--red); }
+    .btn.red:hover { background: #dc2626; }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    /* Screen 2: Interview Room */
+    .room-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--card-border);
+    }
+    .progress-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .timer {
+      font-variant-numeric: tabular-nums;
+      background: #0f172a;
+      border: 1px solid var(--card-border);
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--blue);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .interview-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+    @media(max-width: 900px) {
+      .interview-grid { grid-template-columns: 1fr; }
+    }
+    .interviewer-pane {
+      background: #0f172a;
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 440px;
+      position: relative;
+    }
+    .avatar-area {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .avatar-circle {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #1e293b, #334155);
+      border: 2px solid var(--blue);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 26px;
+      position: relative;
+    }
+    .avatar-circle.speaking {
+      animation: pulse 1.2s infinite;
+      box-shadow: 0 0 20px rgba(56, 189, 248, 0.4);
+    }
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+      100% { transform: scale(1); }
+    }
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 99px;
+      background: #1e293b;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--text-muted);
+    }
+    .status-pill.speaking .status-dot { background: var(--blue); animation: blink 1s infinite; }
+    .status-pill.listening .status-dot { background: var(--green); animation: blink 0.8s infinite; }
+    @keyframes blink { 50% { opacity: 0.3; } }
+
+    .question-box {
+      margin: 24px 0;
+    }
+    .question-category {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--blue);
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .question-text {
+      font-size: 20px;
+      line-height: 1.45;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    /* Candidate Pane */
+    .candidate-pane {
+      background: #0f172a;
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      position: relative;
+    }
+    .candidate-preview {
+      aspect-ratio: 16/9;
+      background: #070d19;
+      border-radius: 12px;
+      overflow: hidden;
+      position: relative;
+    }
+    .waveform-canvas {
+      width: 100%;
+      height: 48px;
+      background: #070d19;
+      border-radius: 8px;
+      display: block;
+    }
+    /* Tone telemetry HUD */
+    .tone-hud {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      background: #131d33;
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 10px;
+    }
+    .tone-stat {
+      text-align: center;
+    }
+    .tone-stat-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      letter-spacing: 0.05em;
+      margin-bottom: 2px;
+    }
+    .tone-stat-val {
+      font-size: 13px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .transcript-box {
+      background: #070d19;
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 12px;
+      min-height: 85px;
+      max-height: 120px;
+      overflow-y: auto;
+      font-size: 14px;
+      color: #cbd5e1;
+      line-height: 1.4;
+    }
+    .transcript-box em {
+      color: var(--text-muted);
+      font-style: normal;
+    }
+    .room-controls {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    /* Scorecard / Feedback Screen */
+    .scorecard-hero {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: linear-gradient(135deg, #131d33, #1e293b);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 28px;
+      margin-bottom: 24px;
+    }
+    .score-badge {
+      text-align: center;
+      background: #0f172a;
+      border: 2px solid var(--blue);
+      padding: 16px 24px;
+      border-radius: 16px;
+    }
+    .score-num {
+      font-size: 38px;
+      font-weight: 800;
+      color: var(--blue);
+      line-height: 1;
+    }
+    .score-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .metric-card {
+      background: #0f172a;
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 16px;
+    }
+    .metric-card h4 {
+      font-size: 12px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+    .metric-card .val {
+      font-size: 18px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 4px;
+    }
+    .metric-card .desc {
+      font-size: 12px;
+      color: #94a3b8;
+      line-height: 1.35;
+    }
+    .breakdown-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+    }
+    .breakdown-table th, .breakdown-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--card-border);
+      text-align: left;
+      font-size: 13px;
+    }
+    .breakdown-table th {
+      color: var(--text-muted);
+      font-size: 11px;
+      text-transform: uppercase;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <span>Slate</span> Assessment Hub
+      <div class="badge">Enterprise Voice Screen</div>
+    </div>
+    <div class="nav-links">
+      <a href="/">← Slate Dashboard</a>
+    </div>
+  </header>
+
+  <main>
+    <!-- Screen 1: Tech Check & Setup -->
+    <section id="screen-setup" class="screen active">
+      <div class="card">
+        <h2 style="font-size:22px;margin-bottom:6px">Pre-Interview System Check</h2>
+        <p style="color:var(--text-muted);font-size:14px">
+          Welcome to the enterprise voice assessment. Test your camera, microphone, and voice synthesis before entering.
+        </p>
+
+        <div class="setup-grid">
+          <div>
+            <div class="video-preview-box">
+              <video id="setup-video" autoplay muted playsinline></video>
+              <div id="video-fallback-msg" style="position:absolute;color:var(--text-muted);font-size:13px;text-align:center;padding:16px" hidden>
+                Camera preview disabled or inactive
+              </div>
+            </div>
+            <div class="mic-level-container">
+              <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted)">
+                <span>Microphone Input Level</span>
+                <span id="mic-status-text">Testing mic...</span>
+              </div>
+              <div class="level-bar">
+                <div id="mic-level-fill" class="level-fill"></div>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div class="form-group">
+              <label for="role-select">Target Role</label>
+              <select id="role-select">
+                <option value="Data Analyst">Data Analyst</option>
+                <option value="Backend Developer">Backend Developer</option>
+                <option value="Frontend Developer">Frontend Developer</option>
+                <option value="default">General Software Engineer</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="voice-select">Interviewer Voice (Web Speech)</label>
+              <select id="voice-select"></select>
+              <button id="test-voice-btn" class="btn sec" style="margin-top:8px;font-size:12px;padding:6px 12px">
+                🔊 Preview Voice
+              </button>
+            </div>
+
+            <div style="background:#0f172a;border:1px solid var(--card-border);border-radius:10px;padding:14px;margin:20px 0;font-size:13px;color:var(--text-muted);line-height:1.4">
+              <b style="color:#fff">Acoustic Tone Detection Active:</b><br>
+              The system analyzes speaking cadence (WPM), vocal projection, pauses, and filler words ("um", "like", etc.) in real time.
+            </div>
+
+            <button id="enter-room-btn" class="btn" style="width:100%;justify-content:center;padding:14px">
+              Enter Interview Room →
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Screen 2: Enterprise Assessment Room -->
+    <section id="screen-room" class="screen">
+      <div class="room-header">
+        <div class="progress-info">
+          <div class="badge" id="role-badge">Data Analyst</div>
+          <span style="font-size:14px;font-weight:600" id="q-counter">Question 1 of 3</span>
+        </div>
+        <div class="timer">
+          ⏱️ <span id="timer-display">00:00</span>
+        </div>
+      </div>
+
+      <div class="interview-grid">
+        <!-- Interviewer Pane -->
+        <div class="interviewer-pane">
+          <div>
+            <div class="avatar-area">
+              <div id="interviewer-avatar" class="avatar-circle">👔</div>
+              <div>
+                <div style="font-weight:700;font-size:15px">AI Executive Interviewer</div>
+                <div id="interviewer-status" class="status-pill speaking">
+                  <div class="status-dot"></div>
+                  <span id="interviewer-status-text">Interviewer speaking...</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="question-box">
+              <div class="question-category" id="q-category">Technical Problem Solving</div>
+              <div class="question-text" id="q-prompt">Loading question...</div>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:10px">
+            <button id="replay-voice-btn" class="btn sec" style="font-size:13px;padding:8px 12px">
+              🔄 Replay Question Audio
+            </button>
+          </div>
+        </div>
+
+        <!-- Candidate Pane -->
+        <div class="candidate-pane">
+          <div class="candidate-preview">
+            <video id="room-video" autoplay muted playsinline></video>
+            <div style="position:absolute;top:10px;left:10px;background:rgba(15,23,42,0.8);backdrop-filter:blur(4px);padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600">
+              Candidate View (Live)
+            </div>
+          </div>
+
+          <canvas id="waveform" class="waveform-canvas"></canvas>
+
+          <!-- Tone Monitor HUD -->
+          <div class="tone-hud">
+            <div class="tone-stat">
+              <div class="tone-stat-label">Pacing</div>
+              <div id="live-wpm" class="tone-stat-val">-- WPM</div>
+            </div>
+            <div class="tone-stat">
+              <div class="tone-stat-label">Projection</div>
+              <div id="live-proj" class="tone-stat-val">Optimal</div>
+            </div>
+            <div class="tone-stat">
+              <div class="tone-stat-label">Fillers Detected</div>
+              <div id="live-fillers" class="tone-stat-val">0</div>
+            </div>
+          </div>
+
+          <div class="transcript-box" id="transcript-feed">
+            <em>Click "Start Speaking" or begin answering. Live speech-to-text transcript will appear here...</em>
+          </div>
+
+          <div class="room-controls">
+            <button id="record-btn" class="btn red">
+              🎙️ Start Speaking
+            </button>
+            <button id="submit-btn" class="btn" disabled>
+              ✓ Submit Answer
+            </button>
+            <button id="text-fallback-btn" class="btn sec" style="margin-left:auto;font-size:12px">
+              Keyboard Mode
+            </button>
+          </div>
+
+          <div id="manual-text-wrap" style="display:none;margin-top:10px">
+            <textarea id="manual-text" style="width:100%;height:70px;background:#070d19;color:#fff;border:1px solid var(--card-border);border-radius:8px;padding:8px;font-size:13px" placeholder="Type or adjust your answer here..."></textarea>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Screen 3: Post-Interview Enterprise Scorecard -->
+    <section id="screen-feedback" class="screen">
+      <div class="scorecard-hero">
+        <div>
+          <div class="badge" style="margin-bottom:8px">Assessment Complete</div>
+          <h2 style="font-size:24px;margin-bottom:6px">Interview Performance & Delivery Report</h2>
+          <p id="fb-summary" style="color:var(--text-muted);font-size:14px;max-width:650px"></p>
+        </div>
+        <div class="score-badge">
+          <div id="fb-overall-score" class="score-num">--</div>
+          <div class="score-label">Overall Readiness</div>
+        </div>
+      </div>
+
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <h4>Vocal Tone Rating</h4>
+          <div id="fb-tone-label" class="val">--</div>
+          <div id="fb-tone-desc" class="desc">Acoustic confidence and cadence balance.</div>
+        </div>
+        <div class="metric-card">
+          <h4>Average Cadence</h4>
+          <div id="fb-avg-wpm" class="val">-- WPM</div>
+          <div class="desc">Industry standard: 125-155 words per minute.</div>
+        </div>
+        <div class="metric-card">
+          <h4>Filler Words</h4>
+          <div id="fb-fillers-count" class="val">--</div>
+          <div id="fb-fillers-list" class="desc">Tracked fillers: um, uh, like, basically.</div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:24px">
+        <h3 style="font-size:16px;margin-bottom:12px">Question Breakdown & Delivery Notes</h3>
+        <table class="breakdown-table">
+          <thead>
+            <tr>
+              <th style="width:35%">Question</th>
+              <th style="width:30%">Answer Summary</th>
+              <th style="width:15%">Pacing</th>
+              <th style="width:20%">Delivery Tone</th>
+            </tr>
+          </thead>
+          <tbody id="fb-breakdown-body"></tbody>
+        </table>
+      </div>
+
+      <div class="card" style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <b style="font-size:15px">Retake Interview with Adaptive Memory</b>
+          <p style="color:var(--text-muted);font-size:13px">Flags from this session will be reintroduced automatically to test improvement.</p>
+        </div>
+        <div style="display:flex;gap:12px">
+          <button id="retake-btn" class="btn">Retake Session ↻</button>
+          <a href="/" class="btn sec">Return to Dashboard</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // State
+    let currentRole = "Data Analyst";
+    let sessionId = null;
+    let questions = [];
+    let currentQIndex = 0;
+    let currentQuestionText = "";
+    let isRecording = false;
+    let mediaStream = null;
+    let audioCtx = null;
+    let analyser = null;
+    let animationFrame = null;
+    let recognition = null;
+    let currentAnswerText = "";
+    let questionStartTime = 0;
+    let timerInterval = null;
+    let speechStartTime = 0;
+
+    // Tone calculation state
+    let volumeSamples = [];
+    const FILLERS = ["um", "uh", "er", "ah", "like", "you know", "basically", "actually", "sort of", "kind of"];
+
+    const $ = id => document.getElementById(id);
+
+    function showScreen(name) {
+      document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+      $("screen-" + name).classList.add("active");
+    }
+
+    // Populate and choose best voice
+    function setupVoices() {
+      const select = $("voice-select");
+      const voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
+      select.innerHTML = "";
+      if (!voices.length) {
+        select.innerHTML = "<option value=''>Default System Voice</option>";
+        return;
+      }
+      let bestIndex = 0;
+      voices.forEach((v, i) => {
+        const opt = document.createElement("option");
+        opt.value = i;
+        opt.textContent = `${v.name} (${v.lang})`;
+        if (v.name.includes("Natural") || v.name.includes("Google") || v.name.includes("Aria") || v.name.includes("Guy")) {
+          bestIndex = i;
+        }
+        select.appendChild(opt);
+      });
+      select.selectedIndex = bestIndex;
+    }
+    if (window.speechSynthesis) {
+      window.speechSynthesis.onvoiceschanged = setupVoices;
+      setupVoices();
+    }
+
+    $("test-voice-btn").onclick = () => {
+      speakText("Welcome to Slate Assessment Hub. Your audio and video devices are functioning properly.");
+    };
+
+    function speakText(text, onEnd) {
+      if (!window.speechSynthesis) return;
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      const voices = window.speechSynthesis.getVoices();
+      const selIdx = $("voice-select").value;
+      if (voices[selIdx]) u.voice = voices[selIdx];
+      u.rate = 0.95;
+      u.pitch = 1.0;
+
+      const avatar = $("interviewer-avatar");
+      const statusPill = $("interviewer-status");
+      const statusText = $("interviewer-status-text");
+
+      u.onstart = () => {
+        if (avatar) avatar.classList.add("speaking");
+        if (statusPill) {
+          statusPill.className = "status-pill speaking";
+          statusText.textContent = "Interviewer speaking...";
+        }
+      };
+      u.onend = u.onerror = () => {
+        if (avatar) avatar.classList.remove("speaking");
+        if (statusPill) {
+          statusPill.className = "status-pill listening";
+          statusText.textContent = "Listening to candidate...";
+        }
+        if (onEnd) onEnd();
+      };
+      window.speechSynthesis.speak(u);
+    }
+
+    // Media and Audio Analyser setup
+    async function initMedia() {
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        $("setup-video").srcObject = mediaStream;
+        $("room-video").srcObject = mediaStream;
+        $("video-fallback-msg").hidden = true;
+      } catch (err) {
+        console.warn("Camera/Mic permission warning:", err);
+        $("video-fallback-msg").hidden = false;
+        try {
+          mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        } catch (e) {
+          console.warn("No audio device available:", e);
+        }
+      }
+
+      if (mediaStream && mediaStream.getAudioTracks().length) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const src = audioCtx.createMediaStreamSource(mediaStream);
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 256;
+        src.connect(analyser);
+        monitorAudioLevel();
+      }
+    }
+
+    function monitorAudioLevel() {
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      function loop() {
+        analyser.getByteFrequencyData(data);
+        let sum = 0;
+        for (let i = 0; i < data.length; i++) sum += data[i];
+        const avg = sum / data.length;
+        const pct = Math.min(100, Math.round((avg / 128) * 100));
+
+        const fill = $("mic-level-fill");
+        if (fill) fill.style.width = pct + "%";
+        const st = $("mic-status-text");
+        if (st) st.textContent = pct > 10 ? "Signal Active (" + pct + "%)" : "Ready";
+
+        if (isRecording) {
+          volumeSamples.push(avg / 255);
+          drawWaveform(data);
+        }
+        animationFrame = requestAnimationFrame(loop);
+      }
+      loop();
+    }
+
+    function drawWaveform(data) {
+      const canvas = $("waveform");
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#38bdf8";
+      const barWidth = (canvas.width / data.length) * 2;
+      let x = 0;
+      for (let i = 0; i < data.length; i += 2) {
+        const barHeight = (data[i] / 255) * canvas.height;
+        ctx.fillRect(x, canvas.height - barHeight, barWidth - 1, barHeight);
+        x += barWidth;
+      }
+    }
+
+    // Speech Recognition setup
+    function initSpeechRecognition() {
+      const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRec) {
+        console.warn("SpeechRecognition not supported in this browser.");
+        $("manual-text-wrap").style.display = "block";
+        return;
+      }
+      recognition = new SpeechRec();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = "en-US";
+
+      recognition.onresult = (evt) => {
+        let finalTxt = "";
+        let interimTxt = "";
+        for (let i = 0; i < evt.results.length; ++i) {
+          if (evt.results[i].isFinal) {
+            finalTxt += evt.results[i][0].transcript + " ";
+          } else {
+            interimTxt += evt.results[i][0].transcript;
+          }
+        }
+        currentAnswerText = (finalTxt + " " + interimTxt).trim();
+        $("transcript-feed").textContent = currentAnswerText || "Listening...";
+        $("manual-text").value = currentAnswerText;
+        updateRealtimeToneTelemetry();
+      };
+
+      recognition.onerror = (e) => {
+        console.warn("SpeechRec error:", e);
+      };
+    }
+
+    function updateRealtimeToneTelemetry() {
+      const words = currentAnswerText.split(/\s+/).filter(Boolean);
+      const now = Date.now();
+      const elapsedMin = Math.max(0.08, (now - speechStartTime) / 60000);
+      const wpm = Math.round(words.length / elapsedMin);
+      $("live-wpm").textContent = `${wpm} WPM`;
+
+      let fillerCount = 0;
+      const low = " " + currentAnswerText.toLowerCase() + " ";
+      FILLERS.forEach(f => {
+        const matches = low.match(new RegExp(`\\b${f}\\b`, "g"));
+        if (matches) fillerCount += matches.length;
+      });
+      $("live-fillers").textContent = fillerCount;
+
+      let avgVol = 0;
+      if (volumeSamples.length) {
+        avgVol = volumeSamples.reduce((a, b) => a + b, 0) / volumeSamples.length;
+      }
+      if (avgVol < 0.08) $("live-proj").textContent = "Quiet";
+      else if (avgVol > 0.6) $("live-proj").textContent = "Loud";
+      else $("live-proj").textContent = "Clear";
+    }
+
+    // Start Session Flow
+    $("enter-room-btn").onclick = async () => {
+      currentRole = $("role-select").value;
+      $("role-badge").textContent = currentRole;
+      try {
+        const res = await fetch("/v1/interview/voice/mock", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ targetRole: currentRole })
+        });
+        const data = await res.json();
+        sessionId = data.sessionId;
+        currentQuestionText = data.firstQuestion;
+        showScreen("room");
+        loadQuestion(1, data.totalQuestions, currentQuestionText);
+      } catch (err) {
+        alert("Failed to start session: " + err.message);
+      }
+    };
+
+    function loadQuestion(num, total, qText) {
+      currentQIndex = num;
+      currentQuestionText = qText;
+      $("q-counter").textContent = `Question ${num} of ${total}`;
+      $("q-prompt").textContent = qText;
+      $("transcript-feed").innerHTML = "<em>Interviewer is speaking... Listen carefully.</em>";
+      $("manual-text").value = "";
+      currentAnswerText = "";
+      volumeSamples = [];
+      $("live-wpm").textContent = "-- WPM";
+      $("live-fillers").textContent = "0";
+      $("submit-btn").disabled = true;
+      $("record-btn").disabled = true;
+
+      speakText(qText, () => {
+        $("transcript-feed").innerHTML = "<em>Ready. Click 'Start Speaking' to begin your answer.</em>";
+        $("record-btn").disabled = false;
+      });
+      startTimer();
+    }
+
+    $("replay-voice-btn").onclick = () => {
+      speakText(currentQuestionText);
+    };
+
+    function startTimer() {
+      clearInterval(timerInterval);
+      questionStartTime = Date.now();
+      timerInterval = setInterval(() => {
+        const elapsedSec = Math.floor((Date.now() - questionStartTime) / 1000);
+        const m = String(Math.floor(elapsedSec / 60)).padStart(2, "0");
+        const s = String(elapsedSec % 60).padStart(2, "0");
+        $("timer-display").textContent = `${m}:${s}`;
+      }, 1000);
+    }
+
+    $("record-btn").onclick = () => {
+      if (!isRecording) {
+        // Start recording
+        isRecording = true;
+        speechStartTime = Date.now();
+        volumeSamples = [];
+        $("record-btn").textContent = "⏹️ Stop Answering";
+        $("record-btn").className = "btn sec";
+        $("submit-btn").disabled = false;
+        $("transcript-feed").textContent = "Listening to your answer...";
+        if (recognition) {
+          try { recognition.start(); } catch(e){}
+        }
+      } else {
+        // Stop recording
+        isRecording = false;
+        $("record-btn").textContent = "🎙️ Resume Speaking";
+        $("record-btn").className = "btn red";
+        if (recognition) {
+          try { recognition.stop(); } catch(e){}
+        }
+      }
+    };
+
+    $("text-fallback-btn").onclick = () => {
+      const wrap = $("manual-text-wrap");
+      wrap.style.display = wrap.style.display === "none" ? "block" : "none";
+    };
+
+    $("manual-text").oninput = (e) => {
+      currentAnswerText = e.target.value;
+      $("transcript-feed").textContent = currentAnswerText;
+      $("submit-btn").disabled = !currentAnswerText.trim();
+    };
+
+    $("submit-btn").onclick = async () => {
+      if (isRecording) {
+        $("record-btn").click();
+      }
+      clearInterval(timerInterval);
+      const answerVal = $("manual-text").value.trim() || currentAnswerText.trim() || "No answer provided.";
+
+      const durationSec = Math.max(1, (Date.now() - questionStartTime) / 1000);
+      const words = answerVal.split(/\s+/).filter(Boolean);
+      const wpm = Math.round(words.length / (durationSec / 60));
+      const avgVol = volumeSamples.length ? (volumeSamples.reduce((a, b) => a + b, 0) / volumeSamples.length) : 0.25;
+
+      const tonePayload = {
+        durationSec: durationSec,
+        wordsPerMinute: wpm,
+        avgVolumeRms: avgVol
+      };
+
+      try {
+        const res = await fetch(`/v1/interview/voice/${sessionId}/answer`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            text: answerVal,
+            tone: tonePayload
+          })
+        });
+        const data = await res.json();
+        if (data.done) {
+          renderFeedback();
+        } else {
+          loadQuestion(data.questionNumber, data.totalQuestions, data.nextQuestion);
+        }
+      } catch (err) {
+        alert("Submission failed: " + err.message);
+      }
+    };
+
+    async function renderFeedback() {
+      try {
+        const res = await fetch(`/v1/interview/voice/${sessionId}/feedback`);
+        const fb = await res.json();
+        showScreen("feedback");
+
+        $("fb-summary").textContent = fb.summary;
+        const tone = fb.toneAnalysis || {};
+        $("fb-overall-score").textContent = tone.overallScore || 75;
+        $("fb-tone-label").textContent = tone.overallTone || "Composed";
+        $("fb-avg-wpm").textContent = (tone.averageWpm || 135) + " WPM";
+        $("fb-fillers-count").textContent = tone.totalFillers !== undefined ? tone.totalFillers : 0;
+        $("fb-fillers-list").textContent = tone.commonFillers && tone.commonFillers.length ?
+          "Common: " + tone.commonFillers.join(", ") : "Minimal filler words detected.";
+
+        const tbody = $("fb-breakdown-body");
+        tbody.innerHTML = "";
+        (tone.breakdown || []).forEach(item => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td><b>${escapeHtml(item.question)}</b></td>
+            <td><small>${escapeHtml(item.answer || "")}</small></td>
+            <td><span class="badge">${item.tone.wordsPerMinute} WPM</span></td>
+            <td><b>${item.tone.toneLabel}</b><br><small style="color:var(--text-muted)">${item.tone.pacingTip}</small></td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } catch (err) {
+        alert("Failed to load feedback: " + err.message);
+      }
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>'"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c]));
+    }
+
+    $("retake-btn").onclick = () => {
+      showScreen("setup");
+    };
+
+    window.addEventListener("DOMContentLoaded", () => {
+      initMedia();
+      initSpeechRecognition();
+    });
+  </script>
+</body>
+</html>
