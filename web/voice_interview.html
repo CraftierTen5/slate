@@ -60,6 +60,10 @@
       color: var(--blue);
       border: 1px solid rgba(56, 189, 248, 0.3);
     }
+    .badge.green { background: rgba(16, 185, 129, 0.15); color: var(--green); border-color: rgba(16, 185, 129, 0.3); }
+    .badge.red { background: rgba(239, 68, 68, 0.15); color: var(--red); border-color: rgba(239, 68, 68, 0.3); }
+    .badge.amber { background: rgba(245, 158, 11, 0.15); color: var(--amber); border-color: rgba(245, 158, 11, 0.3); }
+
     .nav-links a {
       color: var(--text-muted);
       text-decoration: none;
@@ -75,11 +79,9 @@
       margin: 0 auto;
       padding: 24px 16px 64px;
     }
-    /* Steps / Screens */
     .screen { display: none; }
     .screen.active { display: block; }
 
-    /* Card styling */
     .card {
       background: var(--card);
       border: 1px solid var(--card-border);
@@ -114,9 +116,7 @@
       height: 100%;
       object-fit: cover;
     }
-    .mic-level-container {
-      margin-top: 14px;
-    }
+    .mic-level-container { margin-top: 14px; }
     .level-bar {
       height: 8px;
       background: #1e293b;
@@ -130,12 +130,8 @@
       background: linear-gradient(90deg, var(--green), var(--amber));
       transition: width 0.08s linear;
     }
-    select, input, button {
-      font-family: inherit;
-    }
-    .form-group {
-      margin-bottom: 16px;
-    }
+    select, input, button, textarea { font-family: inherit; }
+    .form-group { margin-bottom: 16px; }
     .form-group label {
       display: block;
       font-size: 13px;
@@ -229,24 +225,24 @@
       gap: 16px;
     }
     .avatar-circle {
-      width: 64px;
-      height: 64px;
+      width: 68px;
+      height: 68px;
       border-radius: 50%;
       background: linear-gradient(135deg, #1e293b, #334155);
       border: 2px solid var(--blue);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 26px;
+      font-size: 28px;
       position: relative;
     }
     .avatar-circle.speaking {
       animation: pulse 1.2s infinite;
-      box-shadow: 0 0 20px rgba(56, 189, 248, 0.4);
+      box-shadow: 0 0 25px rgba(56, 189, 248, 0.5);
     }
     @keyframes pulse {
       0% { transform: scale(1); }
-      50% { transform: scale(1.05); }
+      50% { transform: scale(1.06); }
       100% { transform: scale(1); }
     }
     .status-pill {
@@ -259,6 +255,7 @@
       background: #1e293b;
       color: var(--text-muted);
       font-weight: 500;
+      margin-top: 4px;
     }
     .status-dot {
       width: 8px;
@@ -270,9 +267,7 @@
     .status-pill.listening .status-dot { background: var(--green); animation: blink 0.8s infinite; }
     @keyframes blink { 50% { opacity: 0.3; } }
 
-    .question-box {
-      margin: 24px 0;
-    }
+    .question-box { margin: 24px 0; }
     .question-category {
       font-size: 11px;
       text-transform: uppercase;
@@ -313,7 +308,6 @@
       border-radius: 8px;
       display: block;
     }
-    /* Tone telemetry HUD */
     .tone-hud {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -323,9 +317,7 @@
       border-radius: 10px;
       padding: 10px;
     }
-    .tone-stat {
-      text-align: center;
-    }
+    .tone-stat { text-align: center; }
     .tone-stat-label {
       font-size: 10px;
       text-transform: uppercase;
@@ -350,10 +342,7 @@
       color: #cbd5e1;
       line-height: 1.4;
     }
-    .transcript-box em {
-      color: var(--text-muted);
-      font-style: normal;
-    }
+    .transcript-box em { color: var(--text-muted); font-style: normal; }
     .room-controls {
       display: flex;
       gap: 10px;
@@ -377,6 +366,7 @@
       border: 2px solid var(--blue);
       padding: 16px 24px;
       border-radius: 16px;
+      min-width: 150px;
     }
     .score-num {
       font-size: 38px;
@@ -420,16 +410,37 @@
       color: #94a3b8;
       line-height: 1.35;
     }
+    .weak-box {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 24px;
+    }
+    .weak-box h3 {
+      font-size: 14px;
+      color: #fca5a5;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .weak-box ul {
+      margin-left: 20px;
+      font-size: 13px;
+      color: #fecaca;
+    }
     .breakdown-table {
       width: 100%;
       border-collapse: collapse;
       margin-top: 12px;
     }
     .breakdown-table th, .breakdown-table td {
-      padding: 10px 12px;
+      padding: 12px;
       border-bottom: 1px solid var(--card-border);
       text-align: left;
       font-size: 13px;
+      vertical-align: top;
     }
     .breakdown-table th {
       color: var(--text-muted);
@@ -455,7 +466,7 @@
       <div class="card">
         <h2 style="font-size:22px;margin-bottom:6px">Pre-Interview System Check</h2>
         <p style="color:var(--text-muted);font-size:14px">
-          Welcome to the enterprise voice assessment. Test your camera, microphone, and voice synthesis before entering.
+          Welcome to the enterprise voice assessment. Test your camera, microphone, and natural neural voice before entering.
         </p>
 
         <div class="setup-grid">
@@ -463,7 +474,7 @@
             <div class="video-preview-box">
               <video id="setup-video" autoplay muted playsinline></video>
               <div id="video-fallback-msg" style="position:absolute;color:var(--text-muted);font-size:13px;text-align:center;padding:16px" hidden>
-                Camera preview disabled or inactive
+                Camera preview inactive (Audio-only assessment active)
               </div>
             </div>
             <div class="mic-level-container">
@@ -489,16 +500,24 @@
             </div>
 
             <div class="form-group">
-              <label for="voice-select">Interviewer Voice (Web Speech)</label>
-              <select id="voice-select"></select>
+              <label for="voice-select">Interviewer Neural Voice (Natural TTS)</label>
+              <select id="voice-select">
+                <option value="guy">🎙️ Guy (Executive Male • US Neural)</option>
+                <option value="aria">🎙️ Aria (Professional Female • US Neural)</option>
+                <option value="jenny">🎙️ Jenny (Conversational Female • US Neural)</option>
+                <option value="christopher">🎙️ Christopher (Authoritative Male • US Neural)</option>
+                <option value="sonia">🎙️ Sonia (Professional Female • British Neural)</option>
+                <option value="neerja">🎙️ Neerja (Professional Female • Indian English)</option>
+              </select>
               <button id="test-voice-btn" class="btn sec" style="margin-top:8px;font-size:12px;padding:6px 12px">
-                🔊 Preview Voice
+                🔊 Preview Natural Voice
               </button>
             </div>
 
             <div style="background:#0f172a;border:1px solid var(--card-border);border-radius:10px;padding:14px;margin:20px 0;font-size:13px;color:var(--text-muted);line-height:1.4">
-              <b style="color:#fff">Acoustic Tone Detection Active:</b><br>
-              The system analyzes speaking cadence (WPM), vocal projection, pauses, and filler words ("um", "like", etc.) in real time.
+              <b style="color:#fff">Verification & Acoustic Checks Active:</b><br>
+              • <b>Relevance & Accuracy:</b> Answers are verified against required technical concepts.<br>
+              • <b>Acoustic Tone:</b> Speaking cadence (WPM), projection, and filler words are analyzed live.
             </div>
 
             <button id="enter-room-btn" class="btn" style="width:100%;justify-content:center;padding:14px">
@@ -588,7 +607,7 @@
               ✓ Submit Answer
             </button>
             <button id="text-fallback-btn" class="btn sec" style="margin-left:auto;font-size:12px">
-              Keyboard Mode
+              Keyboard Edit Mode
             </button>
           </div>
 
@@ -603,21 +622,32 @@
     <section id="screen-feedback" class="screen">
       <div class="scorecard-hero">
         <div>
-          <div class="badge" style="margin-bottom:8px">Assessment Complete</div>
+          <div class="badge green" style="margin-bottom:8px">Assessment Complete</div>
           <h2 style="font-size:24px;margin-bottom:6px">Interview Performance & Delivery Report</h2>
           <p id="fb-summary" style="color:var(--text-muted);font-size:14px;max-width:650px"></p>
         </div>
         <div class="score-badge">
           <div id="fb-overall-score" class="score-num">--</div>
-          <div class="score-label">Overall Readiness</div>
+          <div class="score-label" id="fb-overall-rating">Overall Score</div>
         </div>
+      </div>
+
+      <!-- Critical Weak Areas Callout -->
+      <div id="fb-weak-container" class="weak-box" style="display:none">
+        <h3>⚠️ Weak Areas & Off-Topic Flags Detected:</h3>
+        <ul id="fb-weak-list"></ul>
       </div>
 
       <div class="metrics-grid">
         <div class="metric-card">
-          <h4>Vocal Tone Rating</h4>
+          <h4>Technical Accuracy & Relevance</h4>
+          <div id="fb-accuracy-score" class="val">--%</div>
+          <div class="desc">Concept relevance & technical correctness.</div>
+        </div>
+        <div class="metric-card">
+          <h4>Vocal Delivery Confidence</h4>
           <div id="fb-tone-label" class="val">--</div>
-          <div id="fb-tone-desc" class="desc">Acoustic confidence and cadence balance.</div>
+          <div class="desc">Acoustic volume projection and cadence balance.</div>
         </div>
         <div class="metric-card">
           <h4>Average Cadence</h4>
@@ -632,14 +662,14 @@
       </div>
 
       <div class="card" style="margin-bottom:24px">
-        <h3 style="font-size:16px;margin-bottom:12px">Question Breakdown & Delivery Notes</h3>
+        <h3 style="font-size:16px;margin-bottom:12px">Question Breakdown, Correctness & Delivery Notes</h3>
         <table class="breakdown-table">
           <thead>
             <tr>
-              <th style="width:35%">Question</th>
-              <th style="width:30%">Answer Summary</th>
-              <th style="width:15%">Pacing</th>
-              <th style="width:20%">Delivery Tone</th>
+              <th style="width:30%">Question</th>
+              <th style="width:28%">Candidate Answer</th>
+              <th style="width:20%">Technical Correctness</th>
+              <th style="width:22%">Vocal Tone & Pacing</th>
             </tr>
           </thead>
           <tbody id="fb-breakdown-body"></tbody>
@@ -649,7 +679,7 @@
       <div class="card" style="display:flex;justify-content:space-between;align-items:center">
         <div>
           <b style="font-size:15px">Retake Interview with Adaptive Memory</b>
-          <p style="color:var(--text-muted);font-size:13px">Flags from this session will be reintroduced automatically to test improvement.</p>
+          <p style="color:var(--text-muted);font-size:13px">Weak areas and off-topic questions from this session will be reintroduced automatically to test improvement.</p>
         </div>
         <div style="display:flex;gap:12px">
           <button id="retake-btn" class="btn">Retake Session ↻</button>
@@ -660,10 +690,8 @@
   </main>
 
   <script>
-    // State
     let currentRole = "Data Analyst";
     let sessionId = null;
-    let questions = [];
     let currentQIndex = 0;
     let currentQuestionText = "";
     let isRecording = false;
@@ -676,8 +704,8 @@
     let questionStartTime = 0;
     let timerInterval = null;
     let speechStartTime = 0;
+    let currentAudioElement = null;
 
-    // Tone calculation state
     let volumeSamples = [];
     const FILLERS = ["um", "uh", "er", "ah", "like", "you know", "basically", "actually", "sort of", "kind of"];
 
@@ -688,58 +716,74 @@
       $("screen-" + name).classList.add("active");
     }
 
-    // Populate and choose best voice
-    function setupVoices() {
-      const select = $("voice-select");
-      const voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
-      select.innerHTML = "";
-      if (!voices.length) {
-        select.innerHTML = "<option value=''>Default System Voice</option>";
-        return;
-      }
-      let bestIndex = 0;
-      voices.forEach((v, i) => {
-        const opt = document.createElement("option");
-        opt.value = i;
-        opt.textContent = `${v.name} (${v.lang})`;
-        if (v.name.includes("Natural") || v.name.includes("Google") || v.name.includes("Aria") || v.name.includes("Guy")) {
-          bestIndex = i;
-        }
-        select.appendChild(opt);
-      });
-      select.selectedIndex = bestIndex;
-    }
-    if (window.speechSynthesis) {
-      window.speechSynthesis.onvoiceschanged = setupVoices;
-      setupVoices();
-    }
-
-    $("test-voice-btn").onclick = () => {
-      speakText("Welcome to Slate Assessment Hub. Your audio and video devices are functioning properly.");
-    };
-
-    function speakText(text, onEnd) {
-      if (!window.speechSynthesis) return;
-      window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(text);
-      const voices = window.speechSynthesis.getVoices();
-      const selIdx = $("voice-select").value;
-      if (voices[selIdx]) u.voice = voices[selIdx];
-      u.rate = 0.95;
-      u.pitch = 1.0;
-
+    // Play Natural Neural TTS from backend
+    async function playInterviewerAudio(text, onEnd) {
       const avatar = $("interviewer-avatar");
       const statusPill = $("interviewer-status");
       const statusText = $("interviewer-status-text");
 
-      u.onstart = () => {
+      if (currentAudioElement) {
+        currentAudioElement.pause();
+        currentAudioElement = null;
+      }
+
+      function setSpeakingState() {
         if (avatar) avatar.classList.add("speaking");
         if (statusPill) {
           statusPill.className = "status-pill speaking";
-          statusText.textContent = "Interviewer speaking...";
+          statusText.textContent = "Interviewer speaking (Natural AI)...";
         }
-      };
+      }
+
+      function setListeningState() {
+        if (avatar) avatar.classList.remove("speaking");
+        if (statusPill) {
+          statusPill.className = "status-pill listening";
+          statusText.textContent = "Listening to candidate...";
+        }
+        if (onEnd) onEnd();
+      }
+
+      setSpeakingState();
+
+      try {
+        const selVoice = $("voice-select").value || "guy";
+        const url = `/v1/interview/voice/tts?text=${encodeURIComponent(text)}&voice=${encodeURIComponent(selVoice)}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error("TTS endpoint error: " + res.status);
+        const blob = await res.blob();
+        const audioUrl = URL.createObjectURL(blob);
+        const audio = new Audio(audioUrl);
+        currentAudioElement = audio;
+
+        audio.onended = () => {
+          URL.revokeObjectURL(audioUrl);
+          currentAudioElement = null;
+          setListeningState();
+        };
+        audio.onerror = () => {
+          console.warn("Audio playback error, using speech synthesis fallback");
+          fallbackSpeechSynthesis(text, onEnd);
+        };
+        await audio.play();
+      } catch (err) {
+        console.warn("Natural TTS endpoint fallback:", err);
+        fallbackSpeechSynthesis(text, onEnd);
+      }
+    }
+
+    function fallbackSpeechSynthesis(text, onEnd) {
+      if (!window.speechSynthesis) {
+        if (onEnd) onEnd();
+        return;
+      }
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.rate = 0.95;
       u.onend = u.onerror = () => {
+        const avatar = $("interviewer-avatar");
+        const statusPill = $("interviewer-status");
+        const statusText = $("interviewer-status-text");
         if (avatar) avatar.classList.remove("speaking");
         if (statusPill) {
           statusPill.className = "status-pill listening";
@@ -750,6 +794,10 @@
       window.speechSynthesis.speak(u);
     }
 
+    $("test-voice-btn").onclick = () => {
+      playInterviewerAudio("Hello. Welcome to the technical screening. I'm ready to evaluate your domain knowledge and communication.");
+    };
+
     // Media and Audio Analyser setup
     async function initMedia() {
       try {
@@ -758,12 +806,12 @@
         $("room-video").srcObject = mediaStream;
         $("video-fallback-msg").hidden = true;
       } catch (err) {
-        console.warn("Camera/Mic permission warning:", err);
+        console.warn("Camera/Mic warning:", err);
         $("video-fallback-msg").hidden = false;
         try {
           mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         } catch (e) {
-          console.warn("No audio device available:", e);
+          console.warn("No audio device:", e);
         }
       }
 
@@ -907,7 +955,7 @@
       $("submit-btn").disabled = true;
       $("record-btn").disabled = true;
 
-      speakText(qText, () => {
+      playInterviewerAudio(qText, () => {
         $("transcript-feed").innerHTML = "<em>Ready. Click 'Start Speaking' to begin your answer.</em>";
         $("record-btn").disabled = false;
       });
@@ -915,7 +963,7 @@
     }
 
     $("replay-voice-btn").onclick = () => {
-      speakText(currentQuestionText);
+      playInterviewerAudio(currentQuestionText);
     };
 
     function startTimer() {
@@ -931,7 +979,6 @@
 
     $("record-btn").onclick = () => {
       if (!isRecording) {
-        // Start recording
         isRecording = true;
         speechStartTime = Date.now();
         volumeSamples = [];
@@ -943,7 +990,6 @@
           try { recognition.start(); } catch(e){}
         }
       } else {
-        // Stop recording
         isRecording = false;
         $("record-btn").textContent = "🎙️ Resume Speaking";
         $("record-btn").className = "btn red";
@@ -1010,22 +1056,44 @@
 
         $("fb-summary").textContent = fb.summary;
         const tone = fb.toneAnalysis || {};
-        $("fb-overall-score").textContent = tone.overallScore || 75;
+        $("fb-overall-score").textContent = tone.overallScore || 70;
+        $("fb-overall-rating").textContent = tone.overallRating || "Readiness Score";
+        $("fb-accuracy-score").textContent = (tone.contentAccuracyScore || 70) + "%";
         $("fb-tone-label").textContent = tone.overallTone || "Composed";
         $("fb-avg-wpm").textContent = (tone.averageWpm || 135) + " WPM";
         $("fb-fillers-count").textContent = tone.totalFillers !== undefined ? tone.totalFillers : 0;
         $("fb-fillers-list").textContent = tone.commonFillers && tone.commonFillers.length ?
           "Common: " + tone.commonFillers.join(", ") : "Minimal filler words detected.";
 
+        // Weak areas callout
+        const weakBox = $("fb-weak-container");
+        const weakList = $("fb-weak-list");
+        if (fb.weakAreas && fb.weakAreas.length) {
+          weakBox.style.display = "block";
+          weakList.innerHTML = fb.weakAreas.map(w => `<li>${escapeHtml(w)}</li>`).join("");
+        } else {
+          weakBox.style.display = "none";
+        }
+
         const tbody = $("fb-breakdown-body");
         tbody.innerHTML = "";
         (tone.breakdown || []).forEach(item => {
           const tr = document.createElement("tr");
+          const c = item.correctness || {};
+          let badgeClass = c.isValid ? "badge green" : "badge red";
+          if (c.status && c.status.includes("Partially")) badgeClass = "badge amber";
+
           tr.innerHTML = `
             <td><b>${escapeHtml(item.question)}</b></td>
             <td><small>${escapeHtml(item.answer || "")}</small></td>
-            <td><span class="badge">${item.tone.wordsPerMinute} WPM</span></td>
-            <td><b>${item.tone.toneLabel}</b><br><small style="color:var(--text-muted)">${item.tone.pacingTip}</small></td>
+            <td>
+              <span class="${badgeClass}">${escapeHtml(c.status || "Evaluated")} (${c.score || 0}%)</span>
+              <br><small style="color:var(--text-muted);margin-top:4px;display:block">${escapeHtml(c.feedback || "")}</small>
+            </td>
+            <td>
+              <span class="badge">${item.tone.wordsPerMinute} WPM</span> <b>${item.tone.toneLabel}</b>
+              <br><small style="color:var(--text-muted)">${escapeHtml(item.tone.pacingTip)}</small>
+            </td>
           `;
           tbody.appendChild(tr);
         });

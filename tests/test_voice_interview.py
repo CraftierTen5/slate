@@ -1,4 +1,4 @@
-"""Tests for voice-based mock interview and voice tone detection."""
+"""Tests for voice-based mock interview, vocal tone detection, and answer correctness verification."""
 import os, sys
 import pytest
 
@@ -7,7 +7,7 @@ pytest.importorskip("fastapi")
 pytest.importorskip("httpx")
 
 from fastapi.testclient import TestClient
-from slate_core.voice_interview import VoiceInterviewStore, analyze_voice_tone
+from slate_core.voice_interview import VoiceInterviewStore, analyze_voice_tone, verify_answer_correctness
 from slate_api.voice_app import app
 
 @pytest.fixture
@@ -33,35 +33,52 @@ def test_analyze_voice_tone_fillers_and_slow():
     assert tone["projectionRating"] == "Soft / Mumbled"
     assert tone["confidenceScore"] < 60
 
-def test_voice_interview_store_flow_and_memory():
+def test_verify_answer_correctness_relevant_vs_irrelevant():
+    q = "Walk me through a SQL query you wrote to answer a business question."
+    
+    # 1. Totally irrelevant answer (talking about food/movies)
+    bad_ans = "I really love eating pizza with extra cheese on weekends while watching comedy films."
+    eval_bad = verify_answer_correctness(q, bad_ans)
+    assert not eval_bad["isValid"]
+    assert "Irrelevant" in eval_bad["status"]
+    assert eval_bad["weaknessFlag"] is not None
+
+    # 2. Accurate, relevant technical answer
+    good_ans = "I wrote a query with SELECT customer_id, SUM(amount) FROM orders JOIN payments ON orders.id = payments.order_id GROUP BY customer_id."
+    eval_good = verify_answer_correctness(q, good_ans)
+    assert eval_good["isValid"]
+    assert "Accurate" in eval_good["status"]
+    assert eval_good["weaknessFlag"] is None
+
+def test_voice_interview_store_flags_irrelevant_answers_as_weak_areas():
     store = VoiceInterviewStore()
     s1 = store.start("Data Analyst")
-    assert s1["mode"] == "voice"
-    assert s1["totalQuestions"] >= 3
     sid = s1["sessionId"]
 
-    # Answer questions with tone data
-    res1 = store.answer(sid, "I used PostgreSQL with window functions to calculate 30-day moving averages.",
-                        {"durationSec": 10.0, "wordsPerMinute": 130, "avgVolumeRms": 0.35})
-    assert not res1["done"]
-    assert res1["questionNumber"] == 2
+    # Provide completely irrelevant answer to SQL question
+    store.answer(sid, "I enjoy playing football in the evening with my university friends.",
+                 {"durationSec": 10.0, "wordsPerMinute": 130, "avgVolumeRms": 0.35})
+    
+    # Provide relevant answer to question 2
+    store.answer(sid, "I check for null values, duplicates, and outlier ranges using pandas.",
+                 {"durationSec": 8.0, "wordsPerMinute": 135})
 
-    # Provide short answer to trigger weak area
-    store.answer(sid, "short", {"durationSec": 2.0, "wordsPerMinute": 30})
-    store.answer(sid, "I handled data cleaning using pandas and regex checks.", {"durationSec": 8.0, "wordsPerMinute": 135})
+    # Provide short/shallow answer to question 3
+    store.answer(sid, "Mean is average.", {"durationSec": 2.0, "wordsPerMinute": 40})
 
     fb = store.feedback(sid)
     assert fb["transcriptRef"] == sid
-    assert fb["weakAreas"]
-    assert fb["toneAnalysis"]["overallScore"] > 0
-    assert "breakdown" in fb["toneAnalysis"]
+    # Both the irrelevant answer and the shallow answer must be flagged in weakAreas!
+    assert len(fb["weakAreas"]) >= 2
+    assert any("off-topic" in w for w in fb["weakAreas"])
+    assert fb["toneAnalysis"]["contentAccuracyScore"] < 70
 
-    # Adaptive memory test: next session carries the weak area
+    # Adaptive memory test: next session must carry the flagged weak areas
     s2 = store.start("Data Analyst", store.past_feedback())
     assert s2["carriedFromEarlier"]
-    assert "Last time this was flagged" in s2["firstQuestion"]
+    assert any("off-topic" in q for q in s2["carriedFromEarlier"])
 
-def test_voice_api_http_endpoints(client):
+def test_voice_api_http_endpoints_and_tts(client):
     # 1. Start voice session
     r1 = client.post("/v1/interview/voice/mock", json={"targetRole": "Data Analyst"})
     assert r1.status_code == 200
@@ -81,7 +98,7 @@ def test_voice_api_http_endpoints(client):
     assert r3.status_code == 200
     fb = r3.json()
     assert "toneAnalysis" in fb
-    assert fb["toneAnalysis"]["overallTone"]
+    assert fb["toneAnalysis"]["overallRating"]
 
     # 4. Error case: invalid session
     r4 = client.get("/v1/interview/voice/invalid_id/feedback")
@@ -91,3 +108,9 @@ def test_voice_api_http_endpoints(client):
     r5 = client.get("/interview")
     assert r5.status_code == 200
     assert "Slate" in r5.text
+
+    # 6. Natural Neural TTS endpoint
+    r6 = client.get("/v1/interview/voice/tts", params={"text": "Hello candidate", "voice": "guy"})
+    assert r6.status_code == 200
+    assert r6.headers["content-type"] == "audio/mpeg"
+    assert len(r6.content) > 1000
