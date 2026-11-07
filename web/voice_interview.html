@@ -563,9 +563,9 @@
 
             <div style="background:#0f172a;border:1px solid var(--card-border);border-radius:10px;padding:14px;margin:20px 0;font-size:13px;color:var(--text-muted);line-height:1.45">
               <b style="color:#fff">Conversational Interview Features:</b><br>
-              • <b>Hands-Free Mode:</b> Mic stays on continuously. Automatic silence detection submits when you finish talking.<br>
-              • <b>Adaptive Follow-ups:</b> The interviewer asks probing technical follow-ups based on your exact response.<br>
-              • <b>Natural Tone & Verification:</b> Analyzes pacing, filler words, and technical accuracy.
+              • <b>Dynamic Question Sampling:</b> Questions are randomized from an enterprise question bank.<br>
+              • <b>Hands-Free Mode:</b> Automatic silence detection submits when you finish talking.<br>
+              • <b>Adaptive Follow-ups:</b> Probing technical follow-ups based on your exact response.
             </div>
 
             <button id="enter-room-btn" class="btn" style="width:100%;justify-content:center;padding:14px">
@@ -750,7 +750,7 @@
       <div class="card" style="display:flex;justify-content:space-between;align-items:center">
         <div>
           <b style="font-size:15px">Retake Interview with Adaptive Memory</b>
-          <p style="color:var(--text-muted);font-size:13px">Flags from this session will be reintroduced automatically in follow-up sessions.</p>
+          <p style="color:var(--text-muted);font-size:13px">Weak areas and off-topic questions from this session will be reintroduced automatically to test improvement.</p>
         </div>
         <div style="display:flex;gap:12px">
           <button id="retake-btn" class="btn">Retake Session ↻</button>
@@ -780,7 +780,7 @@
     let timerInterval = null;
     let speechStartTime = 0;
 
-    // Silence detection for hands-free turn completion
+    // Silence detection
     let silenceTimer = null;
     let silenceProgressInterval = null;
     const SILENCE_TIMEOUT_MS = 2000;
@@ -889,6 +889,24 @@
       );
     };
 
+    // Cleanly stop media tracks (hardware camera & microphone turn off)
+    function stopMediaTracks() {
+      if (mediaStream) {
+        mediaStream.getTracks().forEach(track => {
+          try { track.stop(); } catch(e){}
+        });
+        mediaStream = null;
+      }
+      const setupVid = $("setup-video");
+      if (setupVid) setupVid.srcObject = null;
+      const roomVid = $("room-video");
+      if (roomVid) roomVid.srcObject = null;
+
+      if (recognition) {
+        try { recognition.stop(); } catch(e){}
+      }
+    }
+
     // Media & Visualizer
     async function initMedia() {
       try {
@@ -917,8 +935,10 @@
     }
 
     function monitorAudioLevel() {
+      if (!analyser) return;
       const data = new Uint8Array(analyser.frequencyBinCount);
       function loop() {
+        if (!analyser || !mediaStream) return;
         analyser.getByteFrequencyData(data);
         let sum = 0;
         for (let i = 0; i < data.length; i++) sum += data[i];
@@ -930,16 +950,13 @@
         const st = $("mic-status-text");
         if (st) st.textContent = pct > 10 ? "Signal Active (" + pct + "%)" : "Ready";
 
-        // If in room and not muted and interviewer not speaking
-        if (!isMicMuted && !isInterviewerSpeaking) {
+        if (!isMicMuted && !isInterviewerSpeaking && mediaStream) {
           volumeSamples.push(avg / 255);
           drawWaveform(data);
-          // If voice energy detected while candidate has spoken, reset silence timer
           if (avg > 18 && currentAnswerText.trim().length > 0) {
             kickSilenceDetector();
           }
         } else {
-          // Clear waveform
           const canvas = $("waveform");
           if (canvas) {
             const ctx = canvas.getContext("2d");
@@ -995,7 +1012,6 @@
       recognition.lang = "en-US";
 
       recognition.onresult = (evt) => {
-        // If interviewer is speaking or candidate muted, ignore transcript to prevent audio echo
         if (isInterviewerSpeaking || isMicMuted) return;
 
         let finalTxt = "";
@@ -1012,7 +1028,6 @@
         $("manual-text").value = currentAnswerText;
         updateRealtimeToneTelemetry();
 
-        // Trigger silence detection countdown if candidate has spoken at least 4 words
         const words = currentAnswerText.split(/\s+/).filter(Boolean);
         if (words.length >= 3) {
           kickSilenceDetector();
@@ -1020,8 +1035,8 @@
       };
 
       recognition.onend = () => {
-        // Automatically restart recognition to keep mic on continuously unless unmounted
-        if (!isMicMuted && $("screen-room").classList.contains("active")) {
+        // Only restart if room is active and not on feedback screen
+        if (!isMicMuted && $("screen-room").classList.contains("active") && mediaStream) {
           try { recognition.start(); } catch(e){}
         }
       };
@@ -1044,7 +1059,6 @@
 
       silenceTimer = setTimeout(() => {
         resetSilenceDetector();
-        // Automatically submit the answer hands-free!
         if (currentAnswerText.trim().length > 0 && !isInterviewerSpeaking && !isSubmitting) {
           $("send-now-btn").click();
         }
@@ -1103,7 +1117,6 @@
         currentQuestionText = data.firstQuestion;
         showScreen("room");
 
-        // Start Speech Recognition loop
         if (recognition) {
           try { recognition.start(); } catch(e){}
         }
@@ -1176,7 +1189,7 @@
       $("transcript-feed").textContent = currentAnswerText;
     };
 
-    // Submitting answer (automatically on silence or manually on Send Now)
+    // Submitting answer
     $("send-now-btn").onclick = async () => {
       if (isSubmitting) return;
       isSubmitting = true;
@@ -1224,6 +1237,9 @@
     };
 
     async function renderFeedback() {
+      // Cleanly stop hardware camera & microphone so device lights turn off
+      stopMediaTracks();
+
       try {
         const res = await fetch(`/v1/interview/voice/${sessionId}/feedback`);
         const fb = await res.json();
@@ -1284,8 +1300,10 @@
       return String(s).replace(/[&<>'"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c]));
     }
 
-    $("retake-btn").onclick = () => {
+    $("retake-btn").onclick = async () => {
       showScreen("setup");
+      await initMedia();
+      initSpeechRecognition();
     };
 
     window.addEventListener("DOMContentLoaded", () => {

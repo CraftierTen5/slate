@@ -1,25 +1,60 @@
 """Voice-based mock interview, vocal tone analysis, answer correctness verification,
-and adaptive human-like conversational follow-ups for Slate.
+dynamic enterprise question sampling, and adaptive human-like follow-ups for Slate.
 
 Zero-cost, completely local and deterministic. Evaluates candidate voice tone,
 speaking pace (WPM), filler words, acoustic projection (RMS volume), delivery confidence,
 and substantive technical correctness and relevance to the question, with interactive follow-up probing.
 """
 import re
-from .sample_data import INTERVIEW_QUESTIONS
+import random
+from .sample_data import INTERVIEW_QUESTIONS as BASE_QUESTIONS
 
 COMMON_FILLERS = [
     "um", "uh", "er", "ah", "like", "you know", "basically", 
     "actually", "sort of", "kind of", "so yeah", "i mean"
 ]
 
+# Comprehensive Enterprise Question Bank across roles & categories
+EXPANDED_QUESTION_BANK = {
+    "Data Analyst": [
+        "Walk me through a SQL query you wrote to answer a complex business question.",
+        "How would you check a dataset for anomalies, nulls, and bad data before analysing it?",
+        "Explain the difference between mean and median and give an example of when each misleads.",
+        "How do you decide between an inner join, a left join, and a full outer join when combining transactional tables?",
+        "If a critical business KPI like daily active users dropped by fifteen percent overnight, how would you investigate the root cause?",
+        "Explain the difference between correlation and causation with a real-world data analysis scenario.",
+        "When working with skewed data distributions, how do you handle extreme outliers in reporting and modeling?",
+        "How do you structure an executive dashboard so leadership can make immediate, actionable decisions?"
+    ],
+    "Backend Developer": [
+        "How do you structure database queries and indexing to prevent API latency bottlenecks under high traffic?",
+        "Explain how you handle authentication, authorization, and secure session management in a modern REST API.",
+        "Walk me through how you design an idempotent endpoint, particularly for payment or order processing.",
+        "How do you approach error handling, logging, and observability when debugging production backend services?",
+        "What strategies do you use for database connection pooling, transactions, and preventing race conditions?",
+        "Explain your strategy for caching with Redis, including cache invalidation and cache stampede prevention."
+    ],
+    "Frontend Developer": [
+        "How do you optimize state management, component re-renders, and bundle sizes in a large React application?",
+        "How do you handle responsive design and layout stability across diverse mobile and desktop screen sizes?",
+        "Explain how you ensure web accessibility, keyboard navigation, and semantic HTML in complex UI components.",
+        "How do you handle asynchronous data fetching, error boundaries, and loading states in client-side applications?",
+        "What strategies do you use for caching API responses and managing client-side offline capabilities?"
+    ],
+    "default": [
+        "Tell me about a complex project you built, the technical trade-offs you made, and what you would change today.",
+        "Describe a time you encountered a critical production bug or blocker and how you diagnosed and fixed it.",
+        "Tell me about a time you had a technical disagreement with a teammate and how you resolved it constructively.",
+        "Why this role and how does it fit into your engineering growth trajectory?"
+    ]
+}
+
 QUESTION_CRITERIA = {
-    # Data Analyst questions
-    "sql query": {
+    "sql": {
         "topics": [
             "sql", "query", "select", "join", "group by", "where", "having", 
             "sum", "count", "avg", "table", "database", "orders", "customers", 
-            "revenue", "filter", "aggregate", "metric", "window", "cte"
+            "revenue", "filter", "aggregate", "metric", "window", "cte", "index"
         ],
         "min_matches": 2,
         "hint": "Address specific SQL clauses (SELECT, JOIN, GROUP BY, WHERE) and how they answered the business metric or query."
@@ -41,7 +76,48 @@ QUESTION_CRITERIA = {
         "min_matches": 2,
         "hint": "Explain how extreme outliers skew the mean while the median remains robust to skewed distributions (e.g. income/salaries)."
     },
-    # General / Engineering questions
+    "join": {
+        "topics": [
+            "inner", "left", "outer", "full", "right", "match", "keys", "table", "null", "rows", "unmatched"
+        ],
+        "min_matches": 2,
+        "hint": "Explain how inner joins retain only matches whereas left/outer joins preserve non-matching rows with nulls."
+    },
+    "dropped": {
+        "topics": [
+            "investigate", "segment", "funnel", "breakdown", "platform", "version", "logs", "metrics", "cohort", "tracking"
+        ],
+        "min_matches": 2,
+        "hint": "Outline a root-cause breakdown by segmenting across devices, release versions, user cohorts, and tracking telemetry."
+    },
+    "indexing": {
+        "topics": [
+            "index", "b-tree", "query", "execution plan", "explain", "scan", "latency", "composite", "bottleneck"
+        ],
+        "min_matches": 2,
+        "hint": "Discuss execution plans, index lookups, composite indexing on filter/join columns, and reducing full table scans."
+    },
+    "authentication": {
+        "topics": [
+            "jwt", "token", "oauth", "session", "bearer", "hash", "bcrypt", "rbac", "role", "header", "https", "refresh"
+        ],
+        "min_matches": 2,
+        "hint": "Discuss JWT tokens, secure HTTP-only cookies, OAuth2, role-based authorization, and password hashing."
+    },
+    "idempotent": {
+        "topics": [
+            "idempotency", "key", "token", "retry", "uuid", "transaction", "header", "duplicate", "payment"
+        ],
+        "min_matches": 2,
+        "hint": "Explain using unique idempotency keys in request headers and atomic database transactions to safely retry operations."
+    },
+    "react": {
+        "topics": [
+            "memo", "usecallback", "usememo", "state", "context", "redux", "bundle", "code-splitting", "lazy", "render"
+        ],
+        "min_matches": 2,
+        "hint": "Discuss component memoization, selective state placement, lazy loading, and avoiding unnecessary re-renders."
+    },
     "project": {
         "topics": [
             "project", "built", "created", "designed", "implemented", "architecture", 
@@ -168,7 +244,7 @@ def generate_followup_question(question: str, answer: str, correctness_eval: dic
         else:
             return "How would you handle edge cases like null values or missing customer records in that query without skewing the aggregate totals?"
 
-    if "bad data" in q_low or "dataset" in q_low:
+    if "bad data" in q_low or "dataset" in q_low or "anomalies" in q_low:
         if "outlier" in ans_low or "skew" in ans_low:
             return "When you detect those outliers, what criteria do you use to decide whether to drop them, cap them, or apply a mathematical transformation?"
         elif "null" in ans_low or "missing" in ans_low:
@@ -181,6 +257,18 @@ def generate_followup_question(question: str, answer: str, correctness_eval: dic
             return "Exactly. Can you describe a real-world business scenario where relying only on the median might also mislead leadership by masking total volume?"
         else:
             return "Could you give a concrete business metric where you would deliberately present both the mean and the median to stakeholders?"
+
+    if "join" in q_low:
+        return "What are the performance implications of joining on non-indexed text columns versus integer foreign keys?"
+
+    if "dropped" in q_low or "kpi" in q_low:
+        return "If you discovered the drop was concentrated entirely on Android devices, what would be your immediate next debugging step?"
+
+    if "indexing" in q_low or "latency" in q_low:
+        return "What are the trade-offs of adding too many indexes on a write-heavy database table?"
+
+    if "authentication" in q_low or "authorization" in q_low:
+        return "How do you handle JWT revocation or logout securely before the token reaches its expiration timestamp?"
 
     if "project" in q_low:
         if "database" in ans_low or "api" in ans_low or "architecture" in ans_low:
@@ -286,36 +374,55 @@ def analyze_voice_tone(text: str, tone_data: dict = None) -> dict:
     }
 
 class VoiceInterviewStore:
-    """Manages voice-enabled interview sessions with interactive follow-ups, acoustic telemetry, and memory."""
+    """Manages voice-enabled interview sessions with dynamic question sampling, follow-ups, and memory."""
     def __init__(self):
         self._sessions = {}
         self._n = 0
+        self._recent_questions = []
 
-    def start(self, target_role: str, past_feedback: list = None) -> dict:
+    def start(self, target_role: str, past_feedback: list = None, question_count: int = 3) -> dict:
         self._n += 1
         sid = f"voice_int_{self._n:03d}"
         past_feedback = past_feedback or []
-        qs = list(INTERVIEW_QUESTIONS.get(target_role, INTERVIEW_QUESTIONS["default"]))
+
+        # Get pool of questions for role
+        role_pool = EXPANDED_QUESTION_BANK.get(target_role) or EXPANDED_QUESTION_BANK["default"]
         
-        # Adaptive memory: carry forward prior weak areas
+        # Adaptive memory: carry forward prior weak areas first
         carried = [w for f in past_feedback for w in f.get("weakAreas", [])]
+        selected_questions = []
         for w in reversed(carried):
-            qs.insert(0, f"Last time this was flagged: {w}. Walk me through this again.")
+            selected_questions.insert(0, f"Last time this was flagged: {w}. Walk me through this again.")
+
+        # Dynamically sample remaining questions to avoid repetitiveness
+        needed = max(1, question_count - len(selected_questions))
+        available = [q for q in role_pool if q not in self._recent_questions and q not in selected_questions]
+        if len(available) < needed:
+            available = [q for q in role_pool if q not in selected_questions] or role_pool
+
+        sampled = random.sample(available, min(needed, len(available)))
+        selected_questions.extend(sampled)
+
+        # Track recent questions to rotate on future sessions
+        for q in sampled:
+            self._recent_questions.append(q)
+        if len(self._recent_questions) > 10:
+            self._recent_questions = self._recent_questions[-10:]
 
         self._sessions[sid] = {
             "role": target_role,
             "mode": "voice",
-            "coreQuestions": qs,
+            "coreQuestions": selected_questions,
             "currentCoreIndex": 0,
             "inFollowup": False,
-            "currentPrompt": qs[0],
-            "dialogue": [],        # list of {question, answer, tone, correctness, isFollowup}
+            "currentPrompt": selected_questions[0],
+            "dialogue": [],
             "carried": carried,
         }
         return {
             "sessionId": sid,
-            "firstQuestion": qs[0],
-            "totalQuestions": len(qs),
+            "firstQuestion": selected_questions[0],
+            "totalQuestions": len(selected_questions),
             "carriedFromEarlier": carried,
             "mode": "voice",
             "isFollowup": False,
@@ -340,8 +447,6 @@ class VoiceInterviewStore:
             "coreIndex": s["currentCoreIndex"]
         })
 
-        # Conversational state progression:
-        # If answering main question -> ask dynamic follow-up
         if not is_followup:
             followup = generate_followup_question(q_text, text, c_eval)
             s["inFollowup"] = True
@@ -355,7 +460,6 @@ class VoiceInterviewStore:
                 "totalQuestions": len(s["coreQuestions"]),
             }
         else:
-            # Answering follow-up -> advance to next core question
             s["inFollowup"] = False
             s["currentCoreIndex"] += 1
             if s["currentCoreIndex"] < len(s["coreQuestions"]):
@@ -365,7 +469,7 @@ class VoiceInterviewStore:
                     "done": False,
                     "isFollowup": False,
                     "nextQuestion": next_q,
-                    "interviewerTransition": "Thank you. Let's move on to the next question:",
+                    "interviewerTransition": "Thank you. Let's move on to the next topic:",
                     "questionNumber": s["currentCoreIndex"] + 1,
                     "totalQuestions": len(s["coreQuestions"]),
                 }
@@ -391,7 +495,6 @@ class VoiceInterviewStore:
             t = item["tone"]
             q = item["question"]
 
-            # Flag weak answers or off-topic responses
             if not c["isValid"] and c.get("weaknessFlag"):
                 weak.append(c["weaknessFlag"])
             elif t["confidenceScore"] < 55 or t["fillerCount"] >= 4:
