@@ -1,8 +1,9 @@
-"""Voice-based mock interview, vocal tone analysis, and answer correctness verification for Slate.
+"""Voice-based mock interview, vocal tone analysis, answer correctness verification,
+and adaptive human-like conversational follow-ups for Slate.
 
 Zero-cost, completely local and deterministic. Evaluates candidate voice tone,
 speaking pace (WPM), filler words, acoustic projection (RMS volume), delivery confidence,
-and substantive technical correctness and relevance to the question.
+and substantive technical correctness and relevance to the question, with interactive follow-up probing.
 """
 import re
 from .sample_data import INTERVIEW_QUESTIONS
@@ -122,8 +123,7 @@ def verify_answer_correctness(question: str, answer: str) -> dict:
                 "weaknessFlag": None
             }
 
-    # Generic check for questions without hardcoded criteria:
-    # Ensure answer shares semantic relevance with non-trivial question terms
+    # Generic check for questions without hardcoded criteria
     q_words = set(re.findall(r"\b[a-z]{4,}\b", q_low)) - {
         "walk", "through", "explain", "describe", "about", "what", "when", 
         "which", "would", "your", "this", "time", "last", "flagged", "again"
@@ -145,6 +145,62 @@ def verify_answer_correctness(question: str, answer: str) -> dict:
         "feedback": "Response is relevant to the question topic.",
         "weaknessFlag": None
     }
+
+
+def generate_followup_question(question: str, answer: str, correctness_eval: dict) -> str:
+    """Generate an adaptive interviewer follow-up question based on candidate's answer."""
+    ans_low = (answer or "").lower()
+    q_low = (question or "").lower()
+
+    # 1. If off-topic or shallow, politely challenge candidate to provide specific technical substance
+    if not correctness_eval["isValid"]:
+        if "incomplete" in correctness_eval["status"].lower():
+            return "Could you elaborate a bit more on that? Walk me through a concrete technical example from your actual experience."
+        else:
+            return f"Understood, but let's connect that back to the core question: {correctness_eval['feedback']} How would you address that specifically?"
+
+    # 2. Topic-specific technical deep dives based on candidate's specific terms
+    if "sql" in q_low:
+        if "join" in ans_low or "group" in ans_low:
+            return "Good. If that joined table grew to fifty million records, how would you optimize the indexing and query execution to prevent bottlenecks?"
+        elif "window" in ans_low or "cte" in ans_low:
+            return "Nice use of window functions or CTEs. What are the memory or execution plan trade-offs when using CTEs versus subqueries or temporary tables?"
+        else:
+            return "How would you handle edge cases like null values or missing customer records in that query without skewing the aggregate totals?"
+
+    if "bad data" in q_low or "dataset" in q_low:
+        if "outlier" in ans_low or "skew" in ans_low:
+            return "When you detect those outliers, what criteria do you use to decide whether to drop them, cap them, or apply a mathematical transformation?"
+        elif "null" in ans_low or "missing" in ans_low:
+            return "When imputing missing values, how do you decide between forward-fill, mean or median imputation, or flagging them as a separate category?"
+        else:
+            return "How would you automate those data validation checks so anomalies are caught in a data pipeline before reaching production dashboards?"
+
+    if "mean" in q_low and "median" in q_low:
+        if "salary" in ans_low or "income" in ans_low or "outlier" in ans_low:
+            return "Exactly. Can you describe a real-world business scenario where relying only on the median might also mislead leadership by masking total volume?"
+        else:
+            return "Could you give a concrete business metric where you would deliberately present both the mean and the median to stakeholders?"
+
+    if "project" in q_low:
+        if "database" in ans_low or "api" in ans_low or "architecture" in ans_low:
+            return "What was the most difficult production bottleneck or bug you encountered in that project, and how did you diagnose and resolve it?"
+        else:
+            return "If you had two more weeks to work on that architecture, what is the single biggest technical refactor or improvement you would prioritize?"
+
+    if "stuck" in q_low:
+        return "What did that experience teach you about designing systems or testing upfront to prevent similar blockers from recurring?"
+
+    if "why this role" in q_low:
+        return "How do you see this role aligning with the specific technical skills and impact you want to achieve over the next year?"
+
+    # Contextual keywords in answer
+    if "test" in ans_low or "testing" in ans_low:
+        return "What was your automated testing strategy to make sure edge cases and regressions were caught?"
+    elif "user" in ans_low or "client" in ans_low:
+        return "How did feedback or latency requirements from real users influence how you architected that solution?"
+
+    return "That's insightful. Could you walk me through one specific edge case or challenge you had to solve while implementing that?"
 
 
 def analyze_voice_tone(text: str, tone_data: dict = None) -> dict:
@@ -230,7 +286,7 @@ def analyze_voice_tone(text: str, tone_data: dict = None) -> dict:
     }
 
 class VoiceInterviewStore:
-    """Manages voice-enabled interview sessions with acoustic telemetry, correctness verification, and memory."""
+    """Manages voice-enabled interview sessions with interactive follow-ups, acoustic telemetry, and memory."""
     def __init__(self):
         self._sessions = {}
         self._n = 0
@@ -249,9 +305,11 @@ class VoiceInterviewStore:
         self._sessions[sid] = {
             "role": target_role,
             "mode": "voice",
-            "questions": qs,
-            "answers": [],
-            "tones": [],
+            "coreQuestions": qs,
+            "currentCoreIndex": 0,
+            "inFollowup": False,
+            "currentPrompt": qs[0],
+            "dialogue": [],        # list of {question, answer, tone, correctness, isFollowup}
             "carried": carried,
         }
         return {
@@ -260,22 +318,65 @@ class VoiceInterviewStore:
             "totalQuestions": len(qs),
             "carriedFromEarlier": carried,
             "mode": "voice",
+            "isFollowup": False,
         }
 
     def answer(self, sid: str, text: str, tone_data: dict = None) -> dict:
         s = self._sessions.get(sid)
         if s is None:
             raise KeyError("session_not_found")
-        s["answers"].append(text or "")
-        s["tones"].append(tone_data or {})
-        idx = len(s["answers"])
-        done = idx >= len(s["questions"])
-        return {
-            "done": done,
-            "nextQuestion": s["questions"][idx] if not done else None,
-            "questionNumber": idx + 1 if not done else idx,
-            "totalQuestions": len(s["questions"]),
-        }
+
+        q_text = s["currentPrompt"]
+        t_eval = analyze_voice_tone(text, tone_data)
+        c_eval = verify_answer_correctness(q_text, text)
+
+        is_followup = s["inFollowup"]
+        s["dialogue"].append({
+            "question": q_text,
+            "answer": text,
+            "tone": t_eval,
+            "correctness": c_eval,
+            "isFollowup": is_followup,
+            "coreIndex": s["currentCoreIndex"]
+        })
+
+        # Conversational state progression:
+        # If answering main question -> ask dynamic follow-up
+        if not is_followup:
+            followup = generate_followup_question(q_text, text, c_eval)
+            s["inFollowup"] = True
+            s["currentPrompt"] = followup
+            return {
+                "done": False,
+                "isFollowup": True,
+                "nextQuestion": followup,
+                "interviewerTransition": "Thanks. Let me ask a follow-up on that:",
+                "questionNumber": s["currentCoreIndex"] + 1,
+                "totalQuestions": len(s["coreQuestions"]),
+            }
+        else:
+            # Answering follow-up -> advance to next core question
+            s["inFollowup"] = False
+            s["currentCoreIndex"] += 1
+            if s["currentCoreIndex"] < len(s["coreQuestions"]):
+                next_q = s["coreQuestions"][s["currentCoreIndex"]]
+                s["currentPrompt"] = next_q
+                return {
+                    "done": False,
+                    "isFollowup": False,
+                    "nextQuestion": next_q,
+                    "interviewerTransition": "Thank you. Let's move on to the next question:",
+                    "questionNumber": s["currentCoreIndex"] + 1,
+                    "totalQuestions": len(s["coreQuestions"]),
+                }
+            else:
+                return {
+                    "done": True,
+                    "isFollowup": False,
+                    "nextQuestion": None,
+                    "questionNumber": len(s["coreQuestions"]),
+                    "totalQuestions": len(s["coreQuestions"]),
+                }
 
     def feedback(self, sid: str) -> dict:
         s = self._sessions.get(sid)
@@ -283,38 +384,28 @@ class VoiceInterviewStore:
             raise KeyError("session_not_found")
 
         weak = []
-        per_q_tones = []
-        tones = s.get("tones", [])
+        dialogue = s.get("dialogue", [])
 
-        for i, (q, a) in enumerate(zip(s["questions"], s["answers"])):
-            t_data = tones[i] if i < len(tones) else {}
-            t_eval = analyze_voice_tone(a, t_data)
-            c_eval = verify_answer_correctness(q, a)
+        for item in dialogue:
+            c = item["correctness"]
+            t = item["tone"]
+            q = item["question"]
 
-            per_q_tones.append({
-                "question": q,
-                "answer": a,
-                "tone": t_eval,
-                "correctness": c_eval
-            })
+            # Flag weak answers or off-topic responses
+            if not c["isValid"] and c.get("weaknessFlag"):
+                weak.append(c["weaknessFlag"])
+            elif t["confidenceScore"] < 55 or t["fillerCount"] >= 4:
+                weak.append(f"vocal delivery on '{q[:30]}...' ({t['toneLabel']}, {t['fillerCount']} fillers)")
 
-            # Check technical correctness & relevance
-            if not c_eval["isValid"] and c_eval.get("weaknessFlag"):
-                weak.append(c_eval["weaknessFlag"])
-            # Check delivery / fillers
-            elif t_eval["confidenceScore"] < 55 or t_eval["fillerCount"] >= 4:
-                weak.append(f"vocal delivery on '{q[:30]}...' ({t_eval['toneLabel']}, {t_eval['fillerCount']} fillers)")
+        if s["currentCoreIndex"] < len(s["coreQuestions"]):
+            weak.append("unanswered interview questions")
 
-        if len(s["answers"]) < len(s["questions"]):
-            weak.append("unanswered questions")
+        avg_conf = round(sum(p["tone"]["confidenceScore"] for p in dialogue) / len(dialogue)) if dialogue else 50
+        avg_wpm = round(sum(p["tone"]["wordsPerMinute"] for p in dialogue) / len(dialogue)) if dialogue else 0
+        avg_accuracy = round(sum(p["correctness"]["score"] for p in dialogue) / len(dialogue)) if dialogue else 50
+        tot_fillers = sum(p["tone"]["fillerCount"] for p in dialogue)
+        all_fillers = sorted(list(set(f for p in dialogue for f in p["tone"]["fillersDetected"])))
 
-        avg_conf = round(sum(p["tone"]["confidenceScore"] for p in per_q_tones) / len(per_q_tones)) if per_q_tones else 50
-        avg_wpm = round(sum(p["tone"]["wordsPerMinute"] for p in per_q_tones) / len(per_q_tones)) if per_q_tones else 0
-        avg_accuracy = round(sum(p["correctness"]["score"] for p in per_q_tones) / len(per_q_tones)) if per_q_tones else 50
-        tot_fillers = sum(p["tone"]["fillerCount"] for p in per_q_tones)
-        all_fillers = sorted(list(set(f for p in per_q_tones for f in p["tone"]["fillersDetected"])))
-
-        # Composite overall score taking both content correctness and delivery into account
         overall_score = round(avg_accuracy * 0.65 + avg_conf * 0.35)
 
         if overall_score >= 80:
@@ -332,11 +423,11 @@ class VoiceInterviewStore:
             "averageWpm": avg_wpm,
             "totalFillers": tot_fillers,
             "commonFillers": all_fillers,
-            "breakdown": per_q_tones,
+            "breakdown": dialogue,
         }
 
         fb = {
-            "summary": f"{len(s['answers'])} of {len(s['questions'])} answered; {len(weak)} weak area(s). Overall rating: {overall_rating} ({overall_score}/100).",
+            "summary": f"{len(dialogue)} responses across {len(s['coreQuestions'])} interview topics; {len(weak)} weak area(s). Overall rating: {overall_rating} ({overall_score}/100).",
             "weakAreas": weak,
             "transcriptRef": sid,
             "toneAnalysis": tone_analysis,

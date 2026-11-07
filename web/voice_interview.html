@@ -63,6 +63,7 @@
     .badge.green { background: rgba(16, 185, 129, 0.15); color: var(--green); border-color: rgba(16, 185, 129, 0.3); }
     .badge.red { background: rgba(239, 68, 68, 0.15); color: var(--red); border-color: rgba(239, 68, 68, 0.3); }
     .badge.amber { background: rgba(245, 158, 11, 0.15); color: var(--amber); border-color: rgba(245, 158, 11, 0.3); }
+    .badge.purple { background: rgba(168, 85, 247, 0.15); color: var(--purple); border-color: rgba(168, 85, 247, 0.3); }
 
     .nav-links a {
       color: var(--text-muted);
@@ -153,8 +154,8 @@
       color: #fff;
       border: none;
       border-radius: 8px;
-      padding: 11px 18px;
-      font-size: 14px;
+      padding: 10px 16px;
+      font-size: 13px;
       font-weight: 600;
       cursor: pointer;
       display: inline-flex;
@@ -169,6 +170,8 @@
       border: 1px solid var(--card-border);
     }
     .btn.sec:hover { background: #334155; }
+    .btn.green { background: #059669; }
+    .btn.green:hover { background: #047857; }
     .btn.red { background: var(--red); }
     .btn.red:hover { background: #dc2626; }
     .btn:disabled { opacity: 0.45; cursor: not-allowed; }
@@ -267,6 +270,7 @@
     }
     .status-pill.speaking .status-dot { background: var(--blue); animation: blink 1s infinite; }
     .status-pill.listening .status-dot { background: var(--green); animation: blink 0.8s infinite; }
+    .status-pill.thinking .status-dot { background: var(--amber); animation: blink 0.6s infinite; }
     @keyframes blink { 50% { opacity: 0.3; } }
 
     .question-box { margin: 24px 0; }
@@ -277,6 +281,9 @@
       color: var(--blue);
       font-weight: 700;
       margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
     .question-text {
       font-size: 20px;
@@ -302,6 +309,23 @@
       border-radius: 12px;
       overflow: hidden;
       position: relative;
+    }
+    .mic-live-tag {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(16, 185, 129, 0.9);
+      color: #fff;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .mic-live-tag.muted {
+      background: rgba(239, 68, 68, 0.9);
     }
     .waveform-canvas {
       width: 100%;
@@ -343,8 +367,22 @@
       font-size: 14px;
       color: #cbd5e1;
       line-height: 1.4;
+      position: relative;
     }
     .transcript-box em { color: var(--text-muted); font-style: normal; }
+    .silence-bar-wrap {
+      margin-top: -8px;
+      background: #1e293b;
+      height: 4px;
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .silence-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: var(--blue);
+      transition: width 0.1s linear;
+    }
     .room-controls {
       display: flex;
       gap: 10px;
@@ -453,13 +491,13 @@
   </style>
 </head>
 <body>
-  <!-- Hidden persistent audio element for seamless neural audio playback -->
+  <!-- Persistent audio element for neural TTS playback -->
   <audio id="interviewer-audio" playsinline preload="auto"></audio>
 
   <header>
     <div class="brand">
       <span>Slate</span> Assessment Hub
-      <div class="badge">Enterprise Voice Screen</div>
+      <div class="badge">Conversational AI Screen</div>
     </div>
     <div class="nav-links">
       <a href="/">← Slate Dashboard</a>
@@ -472,7 +510,7 @@
       <div class="card">
         <h2 style="font-size:22px;margin-bottom:6px">Pre-Interview System Check</h2>
         <p style="color:var(--text-muted);font-size:14px">
-          Welcome to the enterprise voice assessment. Test your camera, microphone, and natural neural voice before entering.
+          Continuous hands-free conversation: your microphone stays on. The interviewer will listen naturally and ask interactive follow-up questions.
         </p>
 
         <div class="setup-grid">
@@ -523,10 +561,11 @@
               </div>
             </div>
 
-            <div style="background:#0f172a;border:1px solid var(--card-border);border-radius:10px;padding:14px;margin:20px 0;font-size:13px;color:var(--text-muted);line-height:1.4">
-              <b style="color:#fff">Verification & Acoustic Checks Active:</b><br>
-              • <b>Relevance & Accuracy:</b> Answers are verified against required technical concepts.<br>
-              • <b>Acoustic Tone:</b> Speaking cadence (WPM), projection, and filler words are analyzed live.
+            <div style="background:#0f172a;border:1px solid var(--card-border);border-radius:10px;padding:14px;margin:20px 0;font-size:13px;color:var(--text-muted);line-height:1.45">
+              <b style="color:#fff">Conversational Interview Features:</b><br>
+              • <b>Hands-Free Mode:</b> Mic stays on continuously. Automatic silence detection submits when you finish talking.<br>
+              • <b>Adaptive Follow-ups:</b> The interviewer asks probing technical follow-ups based on your exact response.<br>
+              • <b>Natural Tone & Verification:</b> Analyzes pacing, filler words, and technical accuracy.
             </div>
 
             <button id="enter-room-btn" class="btn" style="width:100%;justify-content:center;padding:14px">
@@ -542,10 +581,11 @@
       <div class="room-header">
         <div class="progress-info">
           <div class="badge" id="role-badge">Data Analyst</div>
-          <span style="font-size:14px;font-weight:600" id="q-counter">Question 1 of 3</span>
+          <span style="font-size:14px;font-weight:600" id="q-counter">Topic 1 of 3</span>
+          <span id="q-followup-badge" class="badge purple" style="display:none">Follow-up Deep Dive</span>
         </div>
         <div style="display:flex;align-items:center;gap:12px">
-          <!-- Voice Selector inside Room for instant voice switching -->
+          <!-- Voice Selector inside Room -->
           <div style="display:flex;align-items:center;gap:6px">
             <span style="font-size:12px;color:var(--text-muted)">Voice:</span>
             <select id="room-voice-select" style="padding:4px 8px;font-size:12px;background:#1e293b;border:1px solid var(--card-border);border-radius:6px;color:#fff;width:auto">
@@ -579,16 +619,18 @@
             </div>
 
             <div class="question-box">
-              <div class="question-category" id="q-category">Technical Problem Solving</div>
-              <div class="question-text" id="q-prompt">Loading question...</div>
+              <div class="question-category" id="q-category">
+                <span>Technical Discussion</span>
+              </div>
+              <div class="question-text" id="q-prompt">Connecting to interviewer...</div>
             </div>
           </div>
 
           <div style="display:flex;gap:10px;align-items:center">
-            <button id="replay-voice-btn" class="btn sec" style="font-size:13px;padding:8px 12px">
-              🔄 Replay Question Audio
+            <button id="replay-voice-btn" class="btn sec" style="font-size:12px;padding:6px 12px">
+              🔄 Replay Question
             </button>
-            <span id="audio-loading-indicator" style="font-size:12px;color:var(--text-muted)" hidden>Generating audio...</span>
+            <span id="audio-loading-indicator" style="font-size:12px;color:var(--text-muted)" hidden>Thinking & generating audio...</span>
           </div>
         </div>
 
@@ -596,8 +638,8 @@
         <div class="candidate-pane">
           <div class="candidate-preview">
             <video id="room-video" autoplay muted playsinline></video>
-            <div style="position:absolute;top:10px;left:10px;background:rgba(15,23,42,0.8);backdrop-filter:blur(4px);padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600">
-              Candidate View (Live)
+            <div id="mic-status-tag" class="mic-live-tag">
+              ● MIC LIVE • LISTENING
             </div>
           </div>
 
@@ -611,7 +653,7 @@
             </div>
             <div class="tone-stat">
               <div class="tone-stat-label">Projection</div>
-              <div id="live-proj" class="tone-stat-val">Optimal</div>
+              <div id="live-proj" class="tone-stat-val">Clear</div>
             </div>
             <div class="tone-stat">
               <div class="tone-stat-label">Fillers Detected</div>
@@ -619,24 +661,29 @@
             </div>
           </div>
 
-          <div class="transcript-box" id="transcript-feed">
-            <em>Click "Start Speaking" or begin answering. Live speech-to-text transcript will appear here...</em>
+          <div>
+            <div class="transcript-box" id="transcript-feed">
+              <em>Speak freely. When you pause for 2 seconds, your answer is submitted automatically...</em>
+            </div>
+            <div class="silence-bar-wrap">
+              <div id="silence-bar" class="silence-bar-fill"></div>
+            </div>
           </div>
 
           <div class="room-controls">
-            <button id="record-btn" class="btn red">
-              🎙️ Start Speaking
+            <button id="send-now-btn" class="btn green">
+              ⚡ Send Answer Now
             </button>
-            <button id="submit-btn" class="btn" disabled>
-              ✓ Submit Answer
+            <button id="mute-btn" class="btn sec">
+              🎙️ Mic: ON
             </button>
             <button id="text-fallback-btn" class="btn sec" style="margin-left:auto;font-size:12px">
-              Keyboard Edit Mode
+              Keyboard Edit
             </button>
           </div>
 
-          <div id="manual-text-wrap" style="display:none;margin-top:10px">
-            <textarea id="manual-text" style="width:100%;height:70px;background:#070d19;color:#fff;border:1px solid var(--card-border);border-radius:8px;padding:8px;font-size:13px" placeholder="Type or adjust your answer here..."></textarea>
+          <div id="manual-text-wrap" style="display:none;margin-top:6px">
+            <textarea id="manual-text" style="width:100%;height:65px;background:#070d19;color:#fff;border:1px solid var(--card-border);border-radius:8px;padding:8px;font-size:13px" placeholder="Adjust or type response manually..."></textarea>
           </div>
         </div>
       </div>
@@ -686,11 +733,11 @@
       </div>
 
       <div class="card" style="margin-bottom:24px">
-        <h3 style="font-size:16px;margin-bottom:12px">Question Breakdown, Correctness & Delivery Notes</h3>
+        <h3 style="font-size:16px;margin-bottom:12px">Full Conversational Transcript & Technical Notes</h3>
         <table class="breakdown-table">
           <thead>
             <tr>
-              <th style="width:30%">Question</th>
+              <th style="width:30%">Question / Follow-up</th>
               <th style="width:28%">Candidate Answer</th>
               <th style="width:20%">Technical Correctness</th>
               <th style="width:22%">Vocal Tone & Pacing</th>
@@ -703,7 +750,7 @@
       <div class="card" style="display:flex;justify-content:space-between;align-items:center">
         <div>
           <b style="font-size:15px">Retake Interview with Adaptive Memory</b>
-          <p style="color:var(--text-muted);font-size:13px">Weak areas and off-topic questions from this session will be reintroduced automatically to test improvement.</p>
+          <p style="color:var(--text-muted);font-size:13px">Flags from this session will be reintroduced automatically in follow-up sessions.</p>
         </div>
         <div style="display:flex;gap:12px">
           <button id="retake-btn" class="btn">Retake Session ↻</button>
@@ -719,16 +766,25 @@
     let sessionId = null;
     let currentQIndex = 0;
     let currentQuestionText = "";
-    let isRecording = false;
+    let isFollowup = false;
+    let isMicMuted = false;
+    let isInterviewerSpeaking = false;
+    let isSubmitting = false;
+
     let mediaStream = null;
     let audioCtx = null;
     let analyser = null;
-    let animationFrame = null;
     let recognition = null;
     let currentAnswerText = "";
     let questionStartTime = 0;
     let timerInterval = null;
     let speechStartTime = 0;
+
+    // Silence detection for hands-free turn completion
+    let silenceTimer = null;
+    let silenceProgressInterval = null;
+    const SILENCE_TIMEOUT_MS = 2000;
+    let silenceStartTime = 0;
 
     let volumeSamples = [];
     const FILLERS = ["um", "uh", "er", "ah", "like", "you know", "basically", "actually", "sort of", "kind of"];
@@ -751,7 +807,6 @@
       $("voice-select").value = selectedVoice;
     };
 
-    // Unlock browser audio upon initial user interaction
     function unlockAudio() {
       if (audioElem && audioElem.paused) {
         audioElem.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
@@ -761,30 +816,29 @@
 
     // Play Natural Neural Audio
     async function playInterviewerAudio(text, onEnd) {
+      isInterviewerSpeaking = true;
+      updateMicStatusTag();
+      resetSilenceDetector();
+
       const avatar = $("interviewer-avatar");
       const statusPill = $("interviewer-status");
       const statusText = $("interviewer-status-text");
       const indicator = $("audio-loading-indicator");
 
-      function setSpeakingState() {
-        if (avatar) avatar.classList.add("speaking");
-        if (statusPill) {
-          statusPill.className = "status-pill speaking";
-          statusText.textContent = `Interviewer speaking (${selectedVoice.toUpperCase()})...`;
-        }
-      }
+      avatar.classList.add("speaking");
+      statusPill.className = "status-pill speaking";
+      statusText.textContent = `Interviewer speaking (${selectedVoice.toUpperCase()})...`;
+      if (indicator) indicator.hidden = false;
 
-      function setListeningState() {
-        if (avatar) avatar.classList.remove("speaking");
-        if (statusPill) {
-          statusPill.className = "status-pill listening";
-          statusText.textContent = "Listening to candidate...";
-        }
+      function doneSpeaking() {
+        isInterviewerSpeaking = false;
+        if (indicator) indicator.hidden = true;
+        avatar.classList.remove("speaking");
+        statusPill.className = "status-pill listening";
+        statusText.textContent = "Listening to you... (Speak freely)";
+        updateMicStatusTag();
         if (onEnd) onEnd();
       }
-
-      setSpeakingState();
-      if (indicator) indicator.hidden = false;
 
       try {
         const url = `/v1/interview/voice/tts?text=${encodeURIComponent(text)}&voice=${encodeURIComponent(selectedVoice)}`;
@@ -794,23 +848,16 @@
         audioElem.oncanplay = () => {
           if (indicator) indicator.hidden = true;
         };
-
         audioElem.onended = () => {
-          if (indicator) indicator.hidden = true;
-          setListeningState();
+          doneSpeaking();
         };
-
         audioElem.onerror = () => {
-          if (indicator) indicator.hidden = true;
-          console.warn("Audio element error on neural voice, using fallback speech synthesis");
-          fallbackSpeechSynthesis(text, onEnd);
+          doneSpeaking();
         };
-
         await audioElem.play();
       } catch (err) {
-        if (indicator) indicator.hidden = true;
-        console.warn("Audio play prevented or failed:", err);
-        fallbackSpeechSynthesis(text, onEnd);
+        console.warn("Audio play error, falling back:", err);
+        doneSpeaking();
       }
     }
 
@@ -819,32 +866,16 @@
         audioElem.pause();
         audioElem.currentTime = 0;
       }
-      if (window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-      }
+      isInterviewerSpeaking = false;
       const avatar = $("interviewer-avatar");
       const statusPill = $("interviewer-status");
       const statusText = $("interviewer-status-text");
       if (avatar) avatar.classList.remove("speaking");
       if (statusPill) {
         statusPill.className = "status-pill listening";
-        statusText.textContent = "Listening to candidate...";
+        statusText.textContent = "Listening to you... (Speak freely)";
       }
-    }
-
-    function fallbackSpeechSynthesis(text, onEnd) {
-      if (!window.speechSynthesis) {
-        if (onEnd) onEnd();
-        return;
-      }
-      window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(text);
-      u.rate = 0.95;
-      u.onend = u.onerror = () => {
-        stopInterviewerAudio();
-        if (onEnd) onEnd();
-      };
-      window.speechSynthesis.speak(u);
+      updateMicStatusTag();
     }
 
     $("test-voice-btn").onclick = async () => {
@@ -853,12 +884,12 @@
       const status = $("preview-status");
       status.textContent = "Generating...";
       await playInterviewerAudio(
-        `Hello. This is the ${selectedVoice.toUpperCase()} neural interviewer voice. I'm ready for your technical assessment.`,
+        `Hello. This is the ${selectedVoice.toUpperCase()} voice. The microphone will stay on so we can have an interactive dialogue.`,
         () => { status.textContent = "Done."; }
       );
     };
 
-    // Media and Audio Analyser setup
+    // Media & Visualizer
     async function initMedia() {
       try {
         mediaStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
@@ -899,11 +930,23 @@
         const st = $("mic-status-text");
         if (st) st.textContent = pct > 10 ? "Signal Active (" + pct + "%)" : "Ready";
 
-        if (isRecording) {
+        // If in room and not muted and interviewer not speaking
+        if (!isMicMuted && !isInterviewerSpeaking) {
           volumeSamples.push(avg / 255);
           drawWaveform(data);
+          // If voice energy detected while candidate has spoken, reset silence timer
+          if (avg > 18 && currentAnswerText.trim().length > 0) {
+            kickSilenceDetector();
+          }
+        } else {
+          // Clear waveform
+          const canvas = $("waveform");
+          if (canvas) {
+            const ctx = canvas.getContext("2d");
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+          }
         }
-        animationFrame = requestAnimationFrame(loop);
+        requestAnimationFrame(loop);
       }
       loop();
     }
@@ -923,11 +966,26 @@
       }
     }
 
-    // Speech Recognition setup
+    function updateMicStatusTag() {
+      const tag = $("mic-status-tag");
+      if (!tag) return;
+      if (isMicMuted) {
+        tag.className = "mic-live-tag muted";
+        tag.textContent = "✕ MIC MUTED";
+      } else if (isInterviewerSpeaking) {
+        tag.className = "mic-live-tag muted";
+        tag.textContent = "🔊 INTERVIEWER TALKING";
+      } else {
+        tag.className = "mic-live-tag";
+        tag.textContent = "● MIC LIVE • LISTENING";
+      }
+    }
+
+    // Hands-Free Speech Recognition
     function initSpeechRecognition() {
       const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SpeechRec) {
-        console.warn("SpeechRecognition not supported in this browser.");
+        console.warn("SpeechRecognition not supported.");
         $("manual-text-wrap").style.display = "block";
         return;
       }
@@ -937,6 +995,9 @@
       recognition.lang = "en-US";
 
       recognition.onresult = (evt) => {
+        // If interviewer is speaking or candidate muted, ignore transcript to prevent audio echo
+        if (isInterviewerSpeaking || isMicMuted) return;
+
         let finalTxt = "";
         let interimTxt = "";
         for (let i = 0; i < evt.results.length; ++i) {
@@ -949,13 +1010,54 @@
         currentAnswerText = (finalTxt + " " + interimTxt).trim();
         $("transcript-feed").textContent = currentAnswerText || "Listening to your answer...";
         $("manual-text").value = currentAnswerText;
-        $("submit-btn").disabled = !currentAnswerText.trim();
         updateRealtimeToneTelemetry();
+
+        // Trigger silence detection countdown if candidate has spoken at least 4 words
+        const words = currentAnswerText.split(/\s+/).filter(Boolean);
+        if (words.length >= 3) {
+          kickSilenceDetector();
+        }
+      };
+
+      recognition.onend = () => {
+        // Automatically restart recognition to keep mic on continuously unless unmounted
+        if (!isMicMuted && $("screen-room").classList.contains("active")) {
+          try { recognition.start(); } catch(e){}
+        }
       };
 
       recognition.onerror = (e) => {
         console.warn("SpeechRec error:", e);
       };
+    }
+
+    function kickSilenceDetector() {
+      resetSilenceDetector();
+      silenceStartTime = Date.now();
+      const silenceBar = $("silence-bar");
+
+      silenceProgressInterval = setInterval(() => {
+        const elapsed = Date.now() - silenceStartTime;
+        const pct = Math.min(100, Math.round((elapsed / SILENCE_TIMEOUT_MS) * 100));
+        if (silenceBar) silenceBar.style.width = pct + "%";
+      }, 50);
+
+      silenceTimer = setTimeout(() => {
+        resetSilenceDetector();
+        // Automatically submit the answer hands-free!
+        if (currentAnswerText.trim().length > 0 && !isInterviewerSpeaking && !isSubmitting) {
+          $("send-now-btn").click();
+        }
+      }, SILENCE_TIMEOUT_MS);
+    }
+
+    function resetSilenceDetector() {
+      if (silenceTimer) clearTimeout(silenceTimer);
+      if (silenceProgressInterval) clearInterval(silenceProgressInterval);
+      silenceTimer = null;
+      silenceProgressInterval = null;
+      const silenceBar = $("silence-bar");
+      if (silenceBar) silenceBar.style.width = "0%";
     }
 
     function updateRealtimeToneTelemetry() {
@@ -982,7 +1084,7 @@
       else $("live-proj").textContent = "Clear";
     }
 
-    // Start Session Flow
+    // Enter Assessment Room
     $("enter-room-btn").onclick = async () => {
       unlockAudio();
       currentRole = $("role-select").value;
@@ -1000,33 +1102,36 @@
         sessionId = data.sessionId;
         currentQuestionText = data.firstQuestion;
         showScreen("room");
-        loadQuestion(1, data.totalQuestions, currentQuestionText);
+
+        // Start Speech Recognition loop
+        if (recognition) {
+          try { recognition.start(); } catch(e){}
+        }
+
+        loadQuestion(1, data.totalQuestions, currentQuestionText, false);
       } catch (err) {
         alert("Failed to start session: " + err.message);
       }
     };
 
-    function loadQuestion(num, total, qText) {
+    function loadQuestion(num, total, qText, isFollowupFlag) {
       currentQIndex = num;
       currentQuestionText = qText;
-      $("q-counter").textContent = `Question ${num} of ${total}`;
+      isFollowup = isFollowupFlag;
+
+      $("q-counter").textContent = `Topic ${num} of ${total}`;
+      $("q-followup-badge").style.display = isFollowup ? "inline-block" : "none";
       $("q-prompt").textContent = qText;
-      $("transcript-feed").innerHTML = "<em>Interviewer is speaking... Click 'Start Speaking' whenever you are ready.</em>";
+      $("transcript-feed").innerHTML = "<em>Interviewer is speaking... You can start answering whenever ready.</em>";
       $("manual-text").value = "";
       currentAnswerText = "";
       volumeSamples = [];
-      $("live-wpm").textContent = "-- WPM";
-      $("live-fillers").textContent = "0";
-
-      // ALWAYS enable record-btn so candidate is NEVER blocked!
-      $("record-btn").disabled = false;
-      $("record-btn").textContent = "🎙️ Start Speaking";
-      $("record-btn").className = "btn red";
-      $("submit-btn").disabled = true;
-      isRecording = false;
+      speechStartTime = Date.now();
+      resetSilenceDetector();
 
       playInterviewerAudio(qText, () => {
-        $("transcript-feed").innerHTML = "<em>Ready. Click 'Start Speaking' to begin your answer.</em>";
+        $("transcript-feed").innerHTML = "<em>Mic is live. Speak your response freely...</em>";
+        speechStartTime = Date.now();
       });
       startTimer();
     }
@@ -1047,30 +1152,18 @@
       }, 1000);
     }
 
-    $("record-btn").onclick = () => {
-      unlockAudio();
-      // If interviewer was still speaking, stop their audio immediately!
-      stopInterviewerAudio();
-
-      if (!isRecording) {
-        isRecording = true;
-        speechStartTime = Date.now();
-        volumeSamples = [];
-        $("record-btn").textContent = "⏹️ Stop Answering";
-        $("record-btn").className = "btn sec";
-        $("submit-btn").disabled = false;
-        $("transcript-feed").textContent = "Listening to your answer... Speak now.";
-        if (recognition) {
-          try { recognition.start(); } catch(e){}
-        }
+    // Mute / Unmute Toggle
+    $("mute-btn").onclick = () => {
+      isMicMuted = !isMicMuted;
+      if (isMicMuted) {
+        $("mute-btn").textContent = "🔇 Mic: OFF";
+        $("mute-btn").className = "btn red";
+        resetSilenceDetector();
       } else {
-        isRecording = false;
-        $("record-btn").textContent = "🎙️ Resume Speaking";
-        $("record-btn").className = "btn red";
-        if (recognition) {
-          try { recognition.stop(); } catch(e){}
-        }
+        $("mute-btn").textContent = "🎙️ Mic: ON";
+        $("mute-btn").className = "btn sec";
       }
+      updateMicStatusTag();
     };
 
     $("text-fallback-btn").onclick = () => {
@@ -1081,18 +1174,16 @@
     $("manual-text").oninput = (e) => {
       currentAnswerText = e.target.value;
       $("transcript-feed").textContent = currentAnswerText;
-      $("submit-btn").disabled = !currentAnswerText.trim();
     };
 
-    $("submit-btn").onclick = async () => {
+    // Submitting answer (automatically on silence or manually on Send Now)
+    $("send-now-btn").onclick = async () => {
+      if (isSubmitting) return;
+      isSubmitting = true;
+      resetSilenceDetector();
       stopInterviewerAudio();
-      if (isRecording) {
-        isRecording = false;
-        if (recognition) try { recognition.stop(); } catch(e){}
-      }
-      clearInterval(timerInterval);
-      const answerVal = $("manual-text").value.trim() || currentAnswerText.trim() || "No answer provided.";
 
+      const answerVal = $("manual-text").value.trim() || currentAnswerText.trim() || "No answer provided.";
       const durationSec = Math.max(1, (Date.now() - questionStartTime) / 1000);
       const words = answerVal.split(/\s+/).filter(Boolean);
       const wpm = Math.round(words.length / (durationSec / 60));
@@ -1104,6 +1195,11 @@
         avgVolumeRms: avgVol
       };
 
+      const statusPill = $("interviewer-status");
+      const statusText = $("interviewer-status-text");
+      statusPill.className = "status-pill thinking";
+      statusText.textContent = "Interviewer evaluating & formulating follow-up...";
+
       try {
         const res = await fetch(`/v1/interview/voice/${sessionId}/answer`, {
           method: "POST",
@@ -1114,12 +1210,15 @@
           })
         });
         const data = await res.json();
+        isSubmitting = false;
+
         if (data.done) {
           renderFeedback();
         } else {
-          loadQuestion(data.questionNumber, data.totalQuestions, data.nextQuestion);
+          loadQuestion(data.questionNumber, data.totalQuestions, data.nextQuestion, data.isFollowup);
         }
       } catch (err) {
+        isSubmitting = false;
         alert("Submission failed: " + err.message);
       }
     };
@@ -1160,7 +1259,10 @@
           if (c.status && c.status.includes("Partially")) badgeClass = "badge amber";
 
           tr.innerHTML = `
-            <td><b>${escapeHtml(item.question)}</b></td>
+            <td>
+              ${item.isFollowup ? '<span class="badge purple" style="margin-bottom:4px">Follow-up Deep Dive</span><br>' : ''}
+              <b>${escapeHtml(item.question)}</b>
+            </td>
             <td><small>${escapeHtml(item.answer || "")}</small></td>
             <td>
               <span class="${badgeClass}">${escapeHtml(c.status || "Evaluated")} (${c.score || 0}%)</span>

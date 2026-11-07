@@ -1,4 +1,4 @@
-"""Tests for voice-based mock interview, vocal tone detection, and answer correctness verification."""
+"""Tests for voice-based mock interview, vocal tone detection, answer correctness, and interactive follow-ups."""
 import os, sys
 import pytest
 
@@ -50,6 +50,28 @@ def test_verify_answer_correctness_relevant_vs_irrelevant():
     assert "Accurate" in eval_good["status"]
     assert eval_good["weaknessFlag"] is None
 
+def test_interactive_followup_question_flow():
+    store = VoiceInterviewStore()
+    s = store.start("Data Analyst")
+    sid = s["sessionId"]
+    assert "SQL query" in s["firstQuestion"]
+
+    # Candidate answers first question mentioning JOIN and GROUP BY
+    r1 = store.answer(sid, "I wrote an inner join query across orders and customers grouped by region to calculate quarterly metrics.",
+                      {"durationSec": 8.0, "wordsPerMinute": 135})
+    # Must generate an adaptive follow-up deep-dive
+    assert not r1["done"]
+    assert r1["isFollowup"] is True
+    assert "optimize" in r1["nextQuestion"].lower() or "index" in r1["nextQuestion"].lower() or "null" in r1["nextQuestion"].lower()
+
+    # Candidate answers the follow-up
+    r2 = store.answer(sid, "I added composite B-tree indexes on region and order_date to avoid full table scans.",
+                      {"durationSec": 6.0, "wordsPerMinute": 140})
+    # Must now transition to the next core question (Topic 2: bad data)
+    assert not r2["done"]
+    assert r2["isFollowup"] is False
+    assert "bad data" in r2["nextQuestion"].lower() or "dataset" in r2["nextQuestion"].lower()
+
 def test_voice_interview_store_flags_irrelevant_answers_as_weak_areas():
     store = VoiceInterviewStore()
     s1 = store.start("Data Analyst")
@@ -92,6 +114,7 @@ def test_voice_api_http_endpoints_and_tts(client):
         "tone": {"durationSec": 5.5, "wordsPerMinute": 140, "avgVolumeRms": 0.28}
     })
     assert r2.status_code == 200
+    assert "isFollowup" in r2.json()
 
     # 3. Get feedback
     r3 = client.get(f"/v1/interview/voice/{sid}/feedback")
