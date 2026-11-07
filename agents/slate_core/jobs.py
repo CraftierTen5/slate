@@ -46,7 +46,7 @@ def search_jobs(query: str = "", location: str = "", resume_skills=None) -> list
     q, loc = (query or "").lower().strip(), (location or "").lower().strip()
     out = []
     for j in JOBS:
-        if q and q not in j["title"].lower() and not any(q in s for s in j["skills"]):
+        if q and q not in j["title"].lower() and not any(q in _norm(s) for s in j["skills"]):
             continue
         if loc and loc != j["location"].lower():
             continue
