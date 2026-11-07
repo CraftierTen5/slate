@@ -1,5 +1,8 @@
+import io
 import re
 from .sample_data import KNOWN_SKILLS
+
+MAX_PDF_BYTES = 5 * 1024 * 1024
 
 class ParseError(ValueError):
     pass
@@ -31,3 +34,25 @@ def find_skills(text: str) -> list:
 
 def _after(line: str, sep: str) -> str:
     return line.split(sep, 1)[1].strip().rstrip(".") if sep in line else ""
+
+
+def extract_pdf_text(data: bytes) -> str:
+    """Pull selectable text out of PDF bytes. Scanned images and broken files raise ParseError."""
+    if not data or len(data) > MAX_PDF_BYTES:
+        raise ParseError("PDF is empty or larger than 5 MB.")
+    try:
+        from pypdf import PdfReader
+    except ImportError:
+        raise ParseError("PDF support (pypdf) is not installed on this server.")
+    try:
+        reader = PdfReader(io.BytesIO(data))
+        if reader.is_encrypted:
+            raise ParseError("That PDF is password-protected; export it without a password and retry.")
+        text = "\n".join((page.extract_text() or "") for page in reader.pages)
+    except ParseError:
+        raise
+    except Exception:
+        raise ParseError("Could not read that file as a PDF.")
+    if len(text.strip()) < 20:
+        raise ParseError("No selectable text found in that PDF (a scanned image will not work).")
+    return text
