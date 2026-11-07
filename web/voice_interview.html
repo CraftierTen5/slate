@@ -90,7 +90,7 @@
       box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
     }
 
-    /* Screen 1: Tech Setup */
+    /* Setup Grid */
     .setup-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -181,6 +181,8 @@
       margin-bottom: 20px;
       padding-bottom: 16px;
       border-bottom: 1px solid var(--card-border);
+      flex-wrap: wrap;
+      gap: 12px;
     }
     .progress-info {
       display: flex;
@@ -347,6 +349,7 @@
       display: flex;
       gap: 10px;
       flex-wrap: wrap;
+      align-items: center;
     }
 
     /* Scorecard / Feedback Screen */
@@ -450,6 +453,9 @@
   </style>
 </head>
 <body>
+  <!-- Hidden persistent audio element for seamless neural audio playback -->
+  <audio id="interviewer-audio" playsinline preload="auto"></audio>
+
   <header>
     <div class="brand">
       <span>Slate</span> Assessment Hub
@@ -509,9 +515,12 @@
                 <option value="sonia">🎙️ Sonia (Professional Female • British Neural)</option>
                 <option value="neerja">🎙️ Neerja (Professional Female • Indian English)</option>
               </select>
-              <button id="test-voice-btn" class="btn sec" style="margin-top:8px;font-size:12px;padding:6px 12px">
-                🔊 Preview Natural Voice
-              </button>
+              <div style="display:flex;gap:8px;margin-top:8px">
+                <button id="test-voice-btn" class="btn sec" style="font-size:12px;padding:6px 12px">
+                  🔊 Preview Selected Voice
+                </button>
+                <span id="preview-status" style="font-size:12px;color:var(--text-muted);align-self:center"></span>
+              </div>
             </div>
 
             <div style="background:#0f172a;border:1px solid var(--card-border);border-radius:10px;padding:14px;margin:20px 0;font-size:13px;color:var(--text-muted);line-height:1.4">
@@ -535,8 +544,22 @@
           <div class="badge" id="role-badge">Data Analyst</div>
           <span style="font-size:14px;font-weight:600" id="q-counter">Question 1 of 3</span>
         </div>
-        <div class="timer">
-          ⏱️ <span id="timer-display">00:00</span>
+        <div style="display:flex;align-items:center;gap:12px">
+          <!-- Voice Selector inside Room for instant voice switching -->
+          <div style="display:flex;align-items:center;gap:6px">
+            <span style="font-size:12px;color:var(--text-muted)">Voice:</span>
+            <select id="room-voice-select" style="padding:4px 8px;font-size:12px;background:#1e293b;border:1px solid var(--card-border);border-radius:6px;color:#fff;width:auto">
+              <option value="guy">Guy (Male)</option>
+              <option value="aria">Aria (Female)</option>
+              <option value="jenny">Jenny (Female)</option>
+              <option value="christopher">Christopher (Male)</option>
+              <option value="sonia">Sonia (British)</option>
+              <option value="neerja">Neerja (Indian)</option>
+            </select>
+          </div>
+          <div class="timer">
+            ⏱️ <span id="timer-display">00:00</span>
+          </div>
         </div>
       </div>
 
@@ -561,10 +584,11 @@
             </div>
           </div>
 
-          <div style="display:flex;gap:10px">
+          <div style="display:flex;gap:10px;align-items:center">
             <button id="replay-voice-btn" class="btn sec" style="font-size:13px;padding:8px 12px">
               🔄 Replay Question Audio
             </button>
+            <span id="audio-loading-indicator" style="font-size:12px;color:var(--text-muted)" hidden>Generating audio...</span>
           </div>
         </div>
 
@@ -691,6 +715,7 @@
 
   <script>
     let currentRole = "Data Analyst";
+    let selectedVoice = "guy";
     let sessionId = null;
     let currentQIndex = 0;
     let currentQuestionText = "";
@@ -704,34 +729,48 @@
     let questionStartTime = 0;
     let timerInterval = null;
     let speechStartTime = 0;
-    let currentAudioElement = null;
 
     let volumeSamples = [];
     const FILLERS = ["um", "uh", "er", "ah", "like", "you know", "basically", "actually", "sort of", "kind of"];
 
     const $ = id => document.getElementById(id);
+    const audioElem = $("interviewer-audio");
 
     function showScreen(name) {
       document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
       $("screen-" + name).classList.add("active");
     }
 
-    // Play Natural Neural TTS from backend
+    // Voice Selection sync
+    $("voice-select").onchange = (e) => {
+      selectedVoice = e.target.value;
+      $("room-voice-select").value = selectedVoice;
+    };
+    $("room-voice-select").onchange = (e) => {
+      selectedVoice = e.target.value;
+      $("voice-select").value = selectedVoice;
+    };
+
+    // Unlock browser audio upon initial user interaction
+    function unlockAudio() {
+      if (audioElem && audioElem.paused) {
+        audioElem.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
+        audioElem.play().catch(() => {});
+      }
+    }
+
+    // Play Natural Neural Audio
     async function playInterviewerAudio(text, onEnd) {
       const avatar = $("interviewer-avatar");
       const statusPill = $("interviewer-status");
       const statusText = $("interviewer-status-text");
-
-      if (currentAudioElement) {
-        currentAudioElement.pause();
-        currentAudioElement = null;
-      }
+      const indicator = $("audio-loading-indicator");
 
       function setSpeakingState() {
         if (avatar) avatar.classList.add("speaking");
         if (statusPill) {
           statusPill.className = "status-pill speaking";
-          statusText.textContent = "Interviewer speaking (Natural AI)...";
+          statusText.textContent = `Interviewer speaking (${selectedVoice.toUpperCase()})...`;
         }
       }
 
@@ -745,30 +784,51 @@
       }
 
       setSpeakingState();
+      if (indicator) indicator.hidden = false;
 
       try {
-        const selVoice = $("voice-select").value || "guy";
-        const url = `/v1/interview/voice/tts?text=${encodeURIComponent(text)}&voice=${encodeURIComponent(selVoice)}`;
-        const res = await fetch(url);
-        if (!res.ok) throw new Error("TTS endpoint error: " + res.status);
-        const blob = await res.blob();
-        const audioUrl = URL.createObjectURL(blob);
-        const audio = new Audio(audioUrl);
-        currentAudioElement = audio;
+        const url = `/v1/interview/voice/tts?text=${encodeURIComponent(text)}&voice=${encodeURIComponent(selectedVoice)}`;
+        audioElem.pause();
+        audioElem.src = url;
 
-        audio.onended = () => {
-          URL.revokeObjectURL(audioUrl);
-          currentAudioElement = null;
+        audioElem.oncanplay = () => {
+          if (indicator) indicator.hidden = true;
+        };
+
+        audioElem.onended = () => {
+          if (indicator) indicator.hidden = true;
           setListeningState();
         };
-        audio.onerror = () => {
-          console.warn("Audio playback error, using speech synthesis fallback");
+
+        audioElem.onerror = () => {
+          if (indicator) indicator.hidden = true;
+          console.warn("Audio element error on neural voice, using fallback speech synthesis");
           fallbackSpeechSynthesis(text, onEnd);
         };
-        await audio.play();
+
+        await audioElem.play();
       } catch (err) {
-        console.warn("Natural TTS endpoint fallback:", err);
+        if (indicator) indicator.hidden = true;
+        console.warn("Audio play prevented or failed:", err);
         fallbackSpeechSynthesis(text, onEnd);
+      }
+    }
+
+    function stopInterviewerAudio() {
+      if (audioElem) {
+        audioElem.pause();
+        audioElem.currentTime = 0;
+      }
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+      const avatar = $("interviewer-avatar");
+      const statusPill = $("interviewer-status");
+      const statusText = $("interviewer-status-text");
+      if (avatar) avatar.classList.remove("speaking");
+      if (statusPill) {
+        statusPill.className = "status-pill listening";
+        statusText.textContent = "Listening to candidate...";
       }
     }
 
@@ -781,21 +841,21 @@
       const u = new SpeechSynthesisUtterance(text);
       u.rate = 0.95;
       u.onend = u.onerror = () => {
-        const avatar = $("interviewer-avatar");
-        const statusPill = $("interviewer-status");
-        const statusText = $("interviewer-status-text");
-        if (avatar) avatar.classList.remove("speaking");
-        if (statusPill) {
-          statusPill.className = "status-pill listening";
-          statusText.textContent = "Listening to candidate...";
-        }
+        stopInterviewerAudio();
         if (onEnd) onEnd();
       };
       window.speechSynthesis.speak(u);
     }
 
-    $("test-voice-btn").onclick = () => {
-      playInterviewerAudio("Hello. Welcome to the technical screening. I'm ready to evaluate your domain knowledge and communication.");
+    $("test-voice-btn").onclick = async () => {
+      unlockAudio();
+      selectedVoice = $("voice-select").value;
+      const status = $("preview-status");
+      status.textContent = "Generating...";
+      await playInterviewerAudio(
+        `Hello. This is the ${selectedVoice.toUpperCase()} neural interviewer voice. I'm ready for your technical assessment.`,
+        () => { status.textContent = "Done."; }
+      );
     };
 
     // Media and Audio Analyser setup
@@ -887,8 +947,9 @@
           }
         }
         currentAnswerText = (finalTxt + " " + interimTxt).trim();
-        $("transcript-feed").textContent = currentAnswerText || "Listening...";
+        $("transcript-feed").textContent = currentAnswerText || "Listening to your answer...";
         $("manual-text").value = currentAnswerText;
+        $("submit-btn").disabled = !currentAnswerText.trim();
         updateRealtimeToneTelemetry();
       };
 
@@ -923,8 +984,12 @@
 
     // Start Session Flow
     $("enter-room-btn").onclick = async () => {
+      unlockAudio();
       currentRole = $("role-select").value;
+      selectedVoice = $("voice-select").value;
+      $("room-voice-select").value = selectedVoice;
       $("role-badge").textContent = currentRole;
+
       try {
         const res = await fetch("/v1/interview/voice/mock", {
           method: "POST",
@@ -946,23 +1011,28 @@
       currentQuestionText = qText;
       $("q-counter").textContent = `Question ${num} of ${total}`;
       $("q-prompt").textContent = qText;
-      $("transcript-feed").innerHTML = "<em>Interviewer is speaking... Listen carefully.</em>";
+      $("transcript-feed").innerHTML = "<em>Interviewer is speaking... Click 'Start Speaking' whenever you are ready.</em>";
       $("manual-text").value = "";
       currentAnswerText = "";
       volumeSamples = [];
       $("live-wpm").textContent = "-- WPM";
       $("live-fillers").textContent = "0";
+
+      // ALWAYS enable record-btn so candidate is NEVER blocked!
+      $("record-btn").disabled = false;
+      $("record-btn").textContent = "🎙️ Start Speaking";
+      $("record-btn").className = "btn red";
       $("submit-btn").disabled = true;
-      $("record-btn").disabled = true;
+      isRecording = false;
 
       playInterviewerAudio(qText, () => {
         $("transcript-feed").innerHTML = "<em>Ready. Click 'Start Speaking' to begin your answer.</em>";
-        $("record-btn").disabled = false;
       });
       startTimer();
     }
 
     $("replay-voice-btn").onclick = () => {
+      unlockAudio();
       playInterviewerAudio(currentQuestionText);
     };
 
@@ -978,6 +1048,10 @@
     }
 
     $("record-btn").onclick = () => {
+      unlockAudio();
+      // If interviewer was still speaking, stop their audio immediately!
+      stopInterviewerAudio();
+
       if (!isRecording) {
         isRecording = true;
         speechStartTime = Date.now();
@@ -985,7 +1059,7 @@
         $("record-btn").textContent = "⏹️ Stop Answering";
         $("record-btn").className = "btn sec";
         $("submit-btn").disabled = false;
-        $("transcript-feed").textContent = "Listening to your answer...";
+        $("transcript-feed").textContent = "Listening to your answer... Speak now.";
         if (recognition) {
           try { recognition.start(); } catch(e){}
         }
@@ -1011,8 +1085,10 @@
     };
 
     $("submit-btn").onclick = async () => {
+      stopInterviewerAudio();
       if (isRecording) {
-        $("record-btn").click();
+        isRecording = false;
+        if (recognition) try { recognition.stop(); } catch(e){}
       }
       clearInterval(timerInterval);
       const answerVal = $("manual-text").value.trim() || currentAnswerText.trim() || "No answer provided.";
