@@ -61,6 +61,8 @@ Response:
 
 `matchedSkills`, `missingSkills` and `reason` explain the score: which of the listing's required skills the resume has, which it lacks, and one plain sentence combining the two. They are additive - older consumers can ignore them. Without a `resumeId`, `matchedSkills` is empty and `missingSkills` lists every required skill.
 
+Skill matching ignores case and surrounding whitespace on both the resume and the listing. A skill a listing repeats counts once, and `matchScore` is computed from the same matched/missing split as `reason`, so they always agree.
+
 ### 3. Tailoring
 
 `POST /v1/tailor` with `{ "resumeId": "res_123", "jobId": "job_456" }`
