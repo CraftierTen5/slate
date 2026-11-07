@@ -65,7 +65,7 @@ $("parse").onclick=async()=>{try{
   const r=await api("POST","/resume",{text:$("resume").value}); rid=r.resumeId;
   $("parsed").className="msg";$("parsed").innerHTML="<b>"+esc(r.parsed.name)+"</b><br>"+r.parsed.skills.map(s=>'<span class="chip">'+esc(s)+"</span>").join("");
   const j=await api("GET","/jobs?resumeId="+rid);
-  $("jobs").innerHTML=j.jobs.map(x=>`<div class="job"><div><b>${esc(x.title)}</b><br><small>${esc(x.company)} · ${esc(x.location)} · apply by ${esc(x.deadline)}</small><br><small>${esc(x.reason||"")}</small></div><div><span class="score">${Math.round(x.matchScore*100)}%</span> <button data-j="${x.jobId}">Tailor</button></div></div>`).join("");
+  $("jobs").innerHTML=j.jobs.map(x=>`<div class="job"><div><b>${esc(x.title)}</b><br><small>${esc(x.company)} · ${esc(x.location)} · apply by ${esc(x.deadline)}</small><br><small>${esc(x.reason||"")}</small></div><div><span class="score">${Math.round(x.matchScore*100)}%</span> <button data-j="${esc(x.jobId)}">Tailor</button></div></div>`).join("");
   document.querySelectorAll("[data-j]").forEach(b=>b.onclick=()=>tailor(b.dataset.j));
   on("s2");on("s4");on("s5");
 }catch(e){say("parsed",e.message,1)}};
