@@ -10,6 +10,14 @@ Freshness vocabulary (deliberately precise):
     closed            source-confirmed closed, or an explicit application deadline
                       stated by the source has passed
 
+Location rules: location_candidates() returns every place a label names (comma,
+semicolon, slash separated, aliases per part); normalize_location() is the first
+one only. A label starting with "remote" is kept whole so a region restriction is
+never dropped. Limits: "Remote, US", "Remote - US" and "Remote (US)" are NOT treated
+as equal, and no place database is used, so a region and a city cannot be told apart.
+Duplicate hints compare the full candidate sets and stay silent when they differ,
+because a missed hint is safer than conflating distinct listings.
+
 Dedupe rule: a listing's identity is (source, sourceId). Two listings with the same
 title, company and location can still be separate requisitions, so nothing is ever
 merged automatically. Cross-source sameness is surfaced as an unverified hint only.
@@ -36,6 +44,7 @@ _LOCATION_ALIASES = {
     "bangalore": "bengaluru",
     "gurgaon": "gurugram",
     "bombay": "mumbai",
+    "new delhi": "delhi",
 }
 
 
@@ -44,14 +53,34 @@ def listing_key(listing):
     return (listing["source"], listing["sourceId"])
 
 
+def location_candidates(location):
+    """Every canonical place a listing's location label names, in order, no repeats.
+
+    'Pune, Mumbai' -> ['pune', 'mumbai']; separators are comma, semicolon, slash.
+    A label that starts with 'remote' is kept whole ('remote, us' stays distinct
+    from 'remote, india') so a region restriction is never dropped. Non-strings
+    and blanks give []. Use this for filtering and matching: a listing must be
+    found by ANY city it names."""
+    if not isinstance(location, str) or not location.strip():
+        return []
+    text = " ".join(location.lower().split())
+    if text.startswith("remote"):
+        return [text]
+    out = []
+    for part in re.split(r"[,;/]", text):
+        part = part.strip()
+        part = _LOCATION_ALIASES.get(part, part)
+        if part and part not in out:
+            out.append(part)
+    return out
+
+
 def normalize_location(location):
-    """Canonical lowercase city for filtering; aliases collapse common variants.
-    'Remote' stays its own label - remote geography eligibility is unknown unless
-    the posting says otherwise, so it is never rewritten to a place."""
-    if not location:
-        return ""
-    first = location.split(",")[0].split(";")[0].strip().lower()
-    return _LOCATION_ALIASES.get(first, first)
+    """Canonical lowercase FIRST city (kept for compatibility); aliases collapse
+    common variants. Prefer location_candidates() for filtering. 'Remote' stays
+    its own label - never rewritten to a place."""
+    cands = location_candidates(location)
+    return cands[0] if cands else ""
 
 
 def deadline_passed(deadline, now):
@@ -62,6 +91,8 @@ def deadline_passed(deadline, now):
     listing closed on unknown evidence. A naive timestamp carries no timezone,
     so interpreting it would be a guess - the safe answer is unknown.
     """
+    if now.tzinfo is None:
+        raise ValueError("now must be timezone-aware")
     if not deadline:
         return None
     try:
@@ -109,11 +140,12 @@ def _canon(text):
 def cross_source_hint(a, b):
     """Unverified sameness hint across sources, or None. Never merges, never
     drops a listing: callers keep both and may display the hint."""
-    if listing_key(a) == listing_key(b):
-        return None  # same requisition: dedupe by key, not a hint
-    if (_canon(a["company"]) == _canon(b["company"])
-            and _canon(a["title"]) == _canon(b["title"])
-            and normalize_location(a["location"]) == normalize_location(b["location"])):
+    if a.get("source") is None or b.get("source") is None or a.get("source") == b.get("source"):
+        return None  # same source: distinct sourceIds are distinct requisitions
+    places_a, places_b = location_candidates(a.get("location")), location_candidates(b.get("location"))
+    if (places_a and set(places_a) == set(places_b)
+            and _canon(a.get("company")) == _canon(b.get("company"))
+            and _canon(a.get("title")) == _canon(b.get("title"))):
         return ("possible duplicate of %s/%s (unverified - separate requisitions "
                 "can share title and location)" % (b["source"], b["sourceId"]))
     return None
