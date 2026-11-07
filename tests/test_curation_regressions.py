@@ -1,8 +1,11 @@
 """Regression tests for gaps found probing PR #15 helpers with untested inputs."""
 import os, sys, unittest
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "agents"))
-from slate_core.jobs_curation import normalize_location, cross_source_hint, deadline_passed
+from slate_core.jobs_curation import (
+    normalize_location, cross_source_hint, deadline_passed, classify_freshness,
+    PRESENT, ACTIVE, STALE,
+)
 
 NOW = datetime(2026, 11, 8, tzinfo=timezone.utc)
 
@@ -63,3 +66,38 @@ class NowGuard(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RecheckResiduals(unittest.TestCase):
+    """Second audit round: error consistency, degenerate hints, stale boundary."""
+
+    def test_classify_freshness_rejects_naive_now_like_deadline_passed(self):
+        now = datetime(2026, 11, 8)  # naive
+        with self.assertRaises(ValueError):
+            classify_freshness({"source": "s", "sourceId": "1",
+                                "updatedAt": "2026-11-01T00:00:00Z"}, PRESENT, now)
+
+    def test_no_hint_when_company_and_title_both_blank(self):
+        a = {"source": "x", "sourceId": "1", "company": "", "title": "", "location": "Pune"}
+        b = {"source": "y", "sourceId": "2", "company": "", "title": "", "location": "Pune"}
+        self.assertIsNone(cross_source_hint(a, b))
+
+    def test_no_hint_when_title_blank_on_one_side(self):
+        a = {"source": "x", "sourceId": "1", "company": "Acme", "title": "", "location": "Pune"}
+        b = {"source": "y", "sourceId": "2", "company": "Acme", "title": "", "location": "Pune"}
+        self.assertIsNone(cross_source_hint(a, b))
+
+    def test_hint_survives_missing_source_id_key(self):
+        a = {"source": "x", "sourceId": "1", "company": "Acme", "title": "Dev", "location": "Pune"}
+        b = {"source": "y", "company": "Acme", "title": "Dev", "location": "Pune"}
+        hint = cross_source_hint(a, b)  # must not raise KeyError
+        self.assertIn("possible duplicate", hint)
+
+    def test_stale_boundary_counts_partial_days(self):
+        now = datetime(2026, 11, 8, tzinfo=timezone.utc)
+        just_over = {"source": "s", "sourceId": "1",
+                     "updatedAt": (now - timedelta(days=30, hours=12)).isoformat()}
+        self.assertEqual(classify_freshness(just_over, PRESENT, now), STALE)
+        just_under = {"source": "s", "sourceId": "1",
+                      "updatedAt": (now - timedelta(days=29, hours=12)).isoformat()}
+        self.assertEqual(classify_freshness(just_under, PRESENT, now), ACTIVE)
