@@ -23,7 +23,7 @@ title, company and location can still be separate requisitions, so nothing is ev
 merged automatically. Cross-source sameness is surfaced as an unverified hint only.
 """
 import re
-from datetime import datetime, timezone
+from datetime import datetime
 
 ACTIVE = "active"
 STALE = "stale"
@@ -110,7 +110,10 @@ def _age_days(iso_ts, now):
     except (AttributeError, ValueError):
         return None
     if then.tzinfo is None:
-        then = then.replace(tzinfo=timezone.utc)
+        # No timezone means the age cannot be known - same rule as deadlines in
+        # deadline_passed(): never guess. Unknown age stays "active": the listing
+        # was seen in the latest complete refresh.
+        return None
     # Fractional days: flooring to whole days would keep a listing "active"
     # for up to a day past the stale cutoff.
     return (now - then).total_seconds() / 86400
