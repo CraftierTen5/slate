@@ -36,3 +36,18 @@ class SkillNormalization(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SearchQueryNormalization(unittest.TestCase):
+    """The text query must follow the same case rules as skill scoring."""
+
+    def test_lowercase_query_matches_capitalized_skill(self):
+        import slate_core.jobs as J
+        saved = J.JOBS
+        J.JOBS = [{"jobId": "jx", "title": "Backend Engineer", "company": "C",
+                   "location": "Indore", "deadline": "2026-12-01", "url": "u",
+                   "skills": ["Python", "FastAPI"]}]
+        try:
+            self.assertEqual([j["jobId"] for j in J.search_jobs(query="python")], ["jx"])
+        finally:
+            J.JOBS = saved
