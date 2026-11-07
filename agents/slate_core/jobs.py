@@ -1,21 +1,33 @@
 from .sample_data import JOBS
 
-def match_score(resume_skills, job_skills) -> float:
-    """Share of the job's skills the resume has, 0-1, rounded. Same input, same output."""
-    if not job_skills:
-        return 0.0
-    have = {s.lower() for s in resume_skills}
-    return round(sum(1 for s in job_skills if s in have) / len(job_skills), 2)
+def _norm(skill):
+    return str(skill).strip().lower()
 
 def skill_breakdown(resume_skills, job_skills):
     """Split the job's required skills into (matched, missing) against the resume.
 
-    Both lists keep the job's own skill order. Same input, same output.
+    Comparison ignores case and surrounding whitespace on both sides. A skill the
+    listing repeats counts once; blanks are ignored. Both lists keep the job's own
+    wording and first-seen order. Same input, same output.
     """
-    have = {s.lower() for s in (resume_skills or [])}
-    matched = [s for s in job_skills if s in have]
-    missing = [s for s in job_skills if s not in have]
+    if isinstance(resume_skills, str):
+        resume_skills = [resume_skills]
+    have = {_norm(s) for s in (resume_skills or []) if _norm(s)}
+    matched, missing, seen = [], [], set()
+    for s in job_skills or []:
+        key = _norm(s)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        (matched if key in have else missing).append(s.strip() if isinstance(s, str) else s)
     return matched, missing
+
+def match_score(resume_skills, job_skills) -> float:
+    """Share of the job's distinct required skills the resume has, 0-1, rounded.
+    Computed from skill_breakdown so score and explanation always agree."""
+    matched, missing = skill_breakdown(resume_skills, job_skills)
+    total = len(matched) + len(missing)
+    return round(len(matched) / total, 2) if total else 0.0
 
 def match_reason(matched, missing) -> str:
     """One plain sentence explaining the score from the skill breakdown."""
