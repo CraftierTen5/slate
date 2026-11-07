@@ -9,6 +9,7 @@ Needs Python 3.10+. From the repo root:
 
 Open http://localhost:8000. The page walks the flow: paste resume text or upload a PDF, job matches, tailored draft,
 approve, export, roadmap, mock interview. Leave `SLATE_STATE_URL` unset to keep everything in memory.
+A CLI drives the same API: see cli/README.md.
 
 ## Which PR provides what
 
