@@ -3,11 +3,11 @@
 Needs Python 3.10+. From the repo root:
 
     python3 -m venv .venv && . .venv/bin/activate
-    pip install fastapi uvicorn httpx pytest sqlalchemy
-    python -m pytest tests -q                                   # 24 tests at time of writing
+    pip install fastapi uvicorn httpx pytest sqlalchemy python-multipart pypdf
+    python -m pytest tests -q                                   # 30 tests at time of writing
     SLATE_STATE_URL=sqlite:///slate_state.db uvicorn slate_api.app:app --app-dir agents --port 8000
 
-Open http://localhost:8000. The page walks the flow: paste resume, job matches, tailored draft,
+Open http://localhost:8000. The page walks the flow: paste resume text or upload a PDF, job matches, tailored draft,
 approve, export, roadmap, mock interview. Leave `SLATE_STATE_URL` unset to keep everything in memory.
 
 ## Which PR provides what
