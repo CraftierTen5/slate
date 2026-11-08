@@ -9,7 +9,7 @@ Needs Python 3.10+. From the repo root:
       uvicorn slate_api.app:app --app-dir agents --port 8000
 
 Open http://localhost:8000 (the classic page) or http://localhost:8000/ai (opt-in AI draft page).
-The AI page asks you to sign in first; in `SLATE_DEV_AUTH=1` mode enter any email - this is a local
+Both pages ask you to sign in first; in `SLATE_DEV_AUTH=1` mode enter any email - this is a local
 dev identity so the multi-user behavior can be tried without any external account. It is NOT
 security: never run a deployed server this way.
 
