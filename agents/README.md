@@ -116,3 +116,14 @@ candidate decision. Use the visible controls deliberately. The optional browser
 script checks all three fragments in an already signed-in context and verifies
 no POST requests occur. This is not general CSRF/XSS protection or proof that
 every decision originated with a human.
+
+### Same-source draft context
+
+Classic and AI pages bind delayed draft/decision display updates to their draft
+identity/generation, not only the source resume. A prior draft's delayed approval
+or error cannot paint a newer draft from the same resume. PDF upload now replaces
+the source editor with the original extraction rather than leaving unrelated
+previously typed text. The optional browser check covers four same-source late
+approval/error cases plus PDF -> reparse source consistency. AI draft responses
+in these tests are synthetic browser fixtures; no model is called. Server-side
+approval/export checks remain authoritative, not the UI badge.
