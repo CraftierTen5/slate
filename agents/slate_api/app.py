@@ -79,16 +79,21 @@ def _mount(r: APIRouter, get_svc):
         with get_svc(request) as svc: return svc.upload_resume(b.text)
 
     @r.post("/resume/pdf")
-    async def resume_pdf(request: Request, file: UploadFile = File(...)):
+    def resume_pdf(request: Request, file: UploadFile = File(...)):
         with get_svc(request) as svc:  # authenticate BEFORE touching the upload
-            data = await file.read()
+            # FastAPI runs sync endpoints in its worker pool. Never hold the
+            # blocking per-user lock while awaiting on the event loop.
+            data = file.file.read(5_000_001)
             if len(data) > 5_000_000:
                 raise SlateError("resume_unreadable", "PDF is too large (5 MB max).")
             try:
                 text = extract_pdf_text(data)
             except ParseError as e:
                 raise SlateError("resume_unreadable", str(e))
-            return svc.upload_resume(text)
+            result = svc.upload_resume(text)
+            result["sourceText"] = text
+            result["sourceTextKind"] = "original_uploaded_text_not_user_addendum"
+            return result
 
     @r.get("/resume")
     def list_resumes(request: Request):

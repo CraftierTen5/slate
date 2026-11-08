@@ -96,3 +96,51 @@ Postgres was not run. Whole-document rewriting and database lock timeouts remain
 limits; SQL operational failures are not automatically retried. The memory
 store is still single-process/ephemeral, and legacy `SqlSnapshot` and direct
 unconditional `SqlUserStore.save` are not the authenticated concurrency path.
+
+### PDF route execution
+
+PDF decoding runs in FastAPI's synchronous endpoint worker pool, including the
+blocking per-user state lock and bounded file read. The previous async route
+could hold that lock while yielding for a spooled-file read: a second request
+could then block the event loop waiting for the same lock. A timed subprocess
+regression covers two same-user PDF calls and event-loop progress. This does
+not sandbox pypdf CPU/memory use or add request-body/page caps by itself; see
+separate upload hardening PR29. On combining branches, preserve the synchronous
+`file.file.read(5_000_001)` route and PR29's other upload/decoder limits.
+
+### No URL-triggered mutations
+
+The AI page no longer has `#demo`, `#demo-approve` or `#demo-reject`
+automation. Opening a URL must not parse private text, call a model, or make a
+candidate decision. Use the visible controls deliberately. The optional browser
+script checks all three fragments in an already signed-in context and verifies
+no POST requests occur. This is not general CSRF/XSS protection or proof that
+every decision originated with a human.
+
+### Same-source draft context
+
+Classic and AI pages bind delayed draft/decision display updates to their draft
+identity/generation, not only the source resume. A prior draft's delayed approval
+or error cannot paint a newer draft from the same resume. PDF upload now replaces
+the source editor with the original extraction rather than leaving unrelated
+previously typed text. The optional browser check covers four same-source late
+approval/error cases plus PDF -> reparse source consistency. AI draft responses
+in these tests are synthetic browser fixtures; no model is called. Server-side
+approval/export checks remain authoritative, not the UI badge.
+
+### Qualification context limits
+
+Degree/job-title phrases in negative, aspirational or recognized instructional
+lines/sections are not promoted into structured education/work history. Degree
+claim checks use the same conservative eligible-source lines, excluding explicit
+template tips and review skill addenda. A self-reported skill named Bachelor is
+not degree evidence. Original text and literal section previews stay available
+for user review. Existing parsed snapshots are not silently migrated; reparse
+the original source to apply new extraction rules.
+
+These are English literal/context rules, not semantic qualification verification.
+They can omit real history in mixed/negated sentences or unfamiliar sections;
+incomplete credentials such as 'pursuing' are not treated as completed degrees.
+General structured school/nontechnical work extraction, multilingual negation,
+layout recovery and positive completion-status review remain open. No proof of
+employment/degree authenticity follows from a positive phrase.

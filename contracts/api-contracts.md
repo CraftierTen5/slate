@@ -185,3 +185,12 @@ whether to retry; the server does not replay automatically. Upstream model
 work already done is not rolled back. This is document-value conflict detection,
 not a revision/event ledger. Unauthenticated fixture mode, memory stores and
 legacy single-snapshot helpers do not gain multiprocess guarantees.
+
+### PDF source text in upload response
+
+`POST /v1/resume/pdf` also returns `sourceText` and
+`sourceTextKind:original_uploaded_text_not_user_addendum`, so the classic editor
+can replace a previous typed source with the actual PDF extraction. These are
+additive fields, not an edited PDF or independently verified qualifications.
+The current draft display is separately bound to draft identity/generation:
+late decisions from a prior draft must not label a newer draft approved.
