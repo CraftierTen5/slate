@@ -29,6 +29,14 @@ class SlateService:
                 self.approvals._drafts, self.approvals._n = st["drafts"], st["draftN"]
                 self.interviews._sessions, self.interviews._n = st["sessions"], st["sessionN"]
 
+    def reset(self) -> dict:
+        """Demo helper: wipe all resumes, drafts and interview sessions, then persist the empty state."""
+        self._resumes, self._texts = {}, {}
+        self.approvals._drafts, self.approvals._n = {}, 0
+        self.interviews._sessions, self.interviews._n = {}, 0
+        self._persist()
+        return {"reset": True}
+
     def _persist(self):
         if self._store is not None:
             self._store.save({"resumes": self._resumes, "texts": self._texts,
