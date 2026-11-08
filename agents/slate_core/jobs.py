@@ -1,4 +1,12 @@
+from datetime import datetime, timezone
+
 from .sample_data import JOBS
+from .jobs_curation import (DEADLINE_PASSED, PRESENT, classify_freshness,
+                            deadline_passed, location_candidates, normalize_location)
+
+# The sample listings stand in for a real source: their static list IS the demo
+# source's latest complete refresh, so each one counts as observed present.
+DEMO_SOURCE = "mock"
 
 def _norm(skill):
     return str(skill).strip().lower()
@@ -42,19 +50,44 @@ def match_reason(matched, missing) -> str:
         reason += f" Missing: {', '.join(missing)}."
     return reason
 
-def search_jobs(query: str = "", location: str = "", resume_skills=None) -> list:
-    q, loc = (query or "").lower().strip(), (location or "").lower().strip()
+def _as_listing(j) -> dict:
+    """The curation shape for a stored listing. Identity is (source, sourceId);
+    a listing that already carries its own source fields keeps them."""
+    return {"source": j.get("source", DEMO_SOURCE),
+            "sourceId": j.get("sourceId", j["jobId"]),
+            "company": j["company"], "title": j["title"], "location": j["location"],
+            "deadline": j.get("deadline"), "updatedAt": j.get("updatedAt")}
+
+def freshness(j, now) -> str:
+    """Freshness state for one listing at `now` (timezone-aware).
+
+    A deadline closes a listing only when deadline_passed can prove it: a
+    date-only, naive or unparseable deadline is unknown evidence and leaves
+    the listing as observed. Listings are never dropped here - the state is
+    surfaced for the caller to show."""
+    listing = _as_listing(j)
+    if deadline_passed(listing["deadline"], now):
+        return classify_freshness(listing, DEADLINE_PASSED, now)
+    return classify_freshness(listing, PRESENT, now)
+
+def search_jobs(query: str = "", location: str = "", resume_skills=None, now=None) -> list:
+    now = now or datetime.now(timezone.utc)
+    q, loc = (query or "").lower().strip(), normalize_location(location)
     out = []
     for j in JOBS:
         if q and q not in j["title"].lower() and not any(q in _norm(s) for s in j["skills"]):
             continue
-        if loc and loc != j["location"].lower():
+        # Both sides normalized: common city aliases (Bangalore/Bengaluru) match,
+        # every place named in a multi-city label counts, and a label starting
+        # with Remote keeps its region restriction (see location_candidates).
+        if loc and loc not in location_candidates(j["location"]):
             continue
         matched, missing = skill_breakdown(resume_skills, j["skills"])
         out.append({"jobId": j["jobId"], "title": j["title"], "company": j["company"],
                     "location": j["location"], "matchScore": match_score(resume_skills or [], j["skills"]),
                     "matchedSkills": matched, "missingSkills": missing,
                     "reason": match_reason(matched, missing),
+                    "freshness": freshness(j, now),
                     "deadline": j["deadline"], "url": j["url"]})
     return sorted(out, key=lambda x: (-x["matchScore"], x["jobId"]))
 
