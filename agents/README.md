@@ -62,3 +62,19 @@ not a fabricated edited PDF. It does not reparse or approve drafts. Source-bound
 job/draft/roadmap results are cleared when switching versions, and stale delayed
 job/draft responses are discarded. This is not full draft/history/account-data
 management or pagination; retention/delete/export policy remains future work.
+
+### Browser session-state checks
+
+Classic and AI pages clear private source/draft/approval display when sign-in
+expires or a new sign-in is accepted. They discard late successes, HTTP errors,
+401s and network errors from an earlier token/source epoch. Reauthentication
+never automatically replays a mutation. An already-submitted server operation
+may still complete for the original account; UI cancellation is not rollback.
+This does not add token revocation, server sessions or protect against XSS.
+
+Optional synthetic browser check: install Playwright and Chromium in a local
+test environment, then run `python scripts/check_session_ui.py`. Use
+`CHROME_PATH` for a different Chromium binary and `API_PYTHON` if the app's
+Python environment is different. It starts a temporary dev-auth server and
+SQLite DB, tests both pages against eight delayed account-switch cases, and
+calls no models/providers. This is not enabled in CI.
