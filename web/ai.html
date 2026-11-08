@@ -19,13 +19,14 @@ button:disabled{opacity:.35;cursor:not-allowed}
 .msg{margin-top:8px;font-size:14px}.bad{color:var(--bad)}.ok{color:var(--blue)}
 .tag{display:inline-block;border:1px solid var(--mut);color:var(--mut);border-radius:6px;padding:0 8px;font-size:13px}
 .tag.approved{border-color:var(--navy);color:#fff;background:var(--navy)}.tag.rejected{border-color:var(--bad);color:var(--bad)}
+.cite{color:var(--mut);font-size:12px}pre b{font-weight:600}
 pre{white-space:pre-wrap;background:#f5f7fb;border-radius:8px;padding:10px 12px;font:13px/1.5 ui-monospace,monospace}
 .banner{border:1px solid var(--blue);background:#eef2fb;border-radius:12px;padding:12px 14px;margin:0 0 16px;font-size:14px}
 </style></head><body><main>
 <h1>Slate<span>.</span> <small style="font-size:15px;color:var(--mut)">AI draft (opt-in demo)</small></h1>
 <p class="sub">This page calls the real LLM through <code>POST /v1/tailor/ai</code>. It only works when the server was started with a key. Sample data only.</p>
 
-<div class="banner"><b>Human review is required.</b> The LLM can invent claims. Every draft below stays a draft until a person approves it, and the server's claim rules re-check it at approval and export. The rules catch unsupported skills, inflated durations, invented percentages/GPA and unknown degrees - they cannot catch every invented employer or project.</div>
+<div class="banner"><b>Human review is required.</b> The LLM only sees numbered blocks from the uploaded resume and the job, and every draft line must cite its sources like <span class="cite">[S2]</span>. The server re-checks this mechanically at approval and export: uncited lines, unknown citations, invented numbers or names, and lines whose wording leaves the cited sources all block approval. It is still not a fact check - a cited line can still twist a source's meaning, and qualifier inflation ("advanced Excel") can slip through. Review by eye.</div>
 
 <section id="s1"><h2><b>1</b>Resume text</h2>
 <textarea id="resume">Asha Verma
@@ -51,6 +52,18 @@ Skills: Python, Git, Excel, communication</textarea>
 
 <script>
 let resumeId=null, draftId=null;
+// Small safe renderer: escape first, then map light Markdown to HTML so model
+// output never shows raw ** or ## and can never inject markup.
+function mdRender(t){
+  const esc=(t||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  return esc.split(/\n/).map(l=>{
+    let h=l.replace(/^#{1,4}\s*/,"").trim();
+    h=h.replace(/\*\*([^*]+)\*\*/g,"<b>$1</b>").replace(/\*([^*]+)\*/g,"<i>$1</i>");
+    h=h.replace(/\[(S\d+|J)\]/g,'<span class="cite">[$1]</span>');
+    if(/^[-*\u2022]\s+/.test(h)) return "<div>&bull; "+h.replace(/^[-*\u2022]\s+/,"")+"</div>";
+    return h?"<div>"+h+"</div>":"";
+  }).join("");
+}
 async function api(path, method, body){
   const r=await fetch("/v1"+path,{method,headers:{"content-type":"application/json"},body:body?JSON.stringify(body):undefined});
   const j=await r.json().catch(()=>({}));
@@ -75,8 +88,8 @@ document.getElementById("gen").onclick=async()=>{
     const d=await api("/tailor/ai","POST",{resumeId,jobId:document.getElementById("job").value});
     draftId=d.draftId;
     msg.innerHTML='AI draft '+draftId+' created (requiresApproval: '+d.requiresApproval+')';
-    document.getElementById("dres").textContent=d.tailoredResume;
-    document.getElementById("dnote").textContent=d.coverNote;
+    document.getElementById("dres").innerHTML=mdRender(d.tailoredResume);
+    document.getElementById("dnote").innerHTML=mdRender(d.coverNote);
     const f=[];
     if(d.flaggedClaims&&d.flaggedClaims.length)f.push("Skills the resume does not list: "+d.flaggedClaims.join(", "));
     (d.violations||[]).forEach(v=>f.push(v));
@@ -97,7 +110,17 @@ async function decide(what){
 }
 document.getElementById("approve").onclick=()=>decide("approve");
 document.getElementById("reject").onclick=()=>decide("reject");
-// Auto-demo: open /ai#demo to run parse > generate without clicks (used for demos and screenshots). Still never auto-approves.
-if(location.hash==="#demo"){document.getElementById("parse").click();setTimeout(()=>document.getElementById("gen").click(),600)}
+// Auto-demo: /ai#demo runs parse > generate without clicks (used for demos and screenshots).
+// #demo-approve / #demo-reject also click the decision so demos can show the outcome.
+if(location.hash.startsWith("#demo")){
+  document.getElementById("parse").click();
+  const t1=setInterval(()=>{ if(!resumeId)return; clearInterval(t1);
+    document.getElementById("gen").click();
+    const t2=setInterval(()=>{ if(!draftId)return; clearInterval(t2);
+      if(location.hash==="#demo-approve")document.getElementById("approve").click();
+      if(location.hash==="#demo-reject")document.getElementById("reject").click();
+    },100);
+  },100);
+}
 </script>
 </main></body></html>
