@@ -80,3 +80,37 @@ def test_llm_draft_flags_invented_skill():
     d = llm_tailored_draft(PARSED, JOB, m)
     assert d["flaggedClaims"] == ["SQL"]
     assert d["requiresApproval"] is True
+
+
+RESUME_TEXT = ("Asha Verma\nB.Tech Computer Science, IIITM Gwalior, 2027\n"
+               "Intern at ExampleCo (3 months)\n"
+               "Skills: Python, Git, Excel. Scored 8.1 CGPA, 72% in class 12.\n")
+PARSED_FULL = {"name": "Asha Verma", "skills": ["python", "git", "excel"],
+               "experience": [{"title": "Intern", "org": "ExampleCo", "months": 3}],
+               "education": [{"degree": "B.Tech Computer Science", "year": "2027"}]}
+
+
+def test_llm_draft_gate_catches_invented_metric():
+    """Gate must catch an LLM-invented percentage (claims.validate)."""
+    from slate_core.llm import llm_tailored_draft
+    m = MockLLM("RESUME\nAsha, Python. Improved efficiency by 40%.\n\nCOVER NOTE\n8.1 CGPA.")
+    d = llm_tailored_draft(PARSED_FULL, JOB, m, resume_text=RESUME_TEXT)
+    assert any("40%" in v for v in d["violations"])
+    assert d["requiresApproval"] is True
+
+
+def test_llm_draft_gate_catches_inflated_experience():
+    from slate_core.llm import llm_tailored_draft
+    m = MockLLM("RESUME\nAsha, 2 years of Python experience.\n\nCOVER NOTE\n2 years in industry.")
+    d = llm_tailored_draft(PARSED_FULL, JOB, m, resume_text=RESUME_TEXT)
+    assert any("exceeds" in v for v in d["violations"])
+
+
+def test_llm_draft_gate_limit_free_text_employer_not_caught():
+    """Documented limit: an invented employer in free text passes the rules.
+    The draft must still stay behind human approval - this test pins that."""
+    from slate_core.llm import llm_tailored_draft
+    m = MockLLM("RESUME\nAsha, ex-Google intern, Python.\n\nCOVER NOTE\nAt Google I used Python.")
+    d = llm_tailored_draft(PARSED_FULL, JOB, m, resume_text=RESUME_TEXT)
+    assert d["violations"] == []
+    assert d["requiresApproval"] is True
