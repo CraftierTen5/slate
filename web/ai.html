@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Slate - AI draft (opt-in)</title>
+<style>
+:root{--navy:#14213d;--blue:#2457c5;--line:#e3e7ee;--mut:#5b6678;--bad:#b3261e;--warn:#8a5a00}
+*{box-sizing:border-box}body{margin:0;font:16px/1.5 system-ui,sans-serif;color:var(--navy);background:#fff}
+main{max-width:760px;margin:0 auto;padding:24px 16px 64px}
+h1{font-size:28px;margin:0}h1 span{color:var(--blue)}p.sub{color:var(--mut);margin:4px 0 24px}
+section{border:1px solid var(--line);border-radius:12px;padding:16px;margin:0 0 16px}
+section.off{opacity:.45;pointer-events:none}
+h2{font-size:17px;margin:0 0 10px}h2 b{display:inline-block;width:24px;height:24px;border-radius:50%;background:var(--navy);color:#fff;text-align:center;font-size:13px;line-height:24px;margin-right:8px}
+textarea{width:100%;min-height:110px;border:1px solid var(--line);border-radius:8px;padding:10px;font:14px/1.4 ui-monospace,monospace;color:var(--navy)}
+select{font:inherit;padding:8px;border:1px solid var(--line);border-radius:8px;color:var(--navy)}
+button{background:var(--navy);color:#fff;border:0;border-radius:8px;padding:9px 14px;font:inherit;cursor:pointer;margin:8px 8px 0 0}
+button.sec{background:#fff;color:var(--navy);border:1px solid var(--navy)}
+button:disabled{opacity:.35;cursor:not-allowed}
+.warn{background:#fdf6e8;border:1px solid var(--warn);border-radius:8px;padding:10px 12px;margin:10px 0;font-size:14px;color:var(--warn)}
+.warn li{margin:2px 0}
+.msg{margin-top:8px;font-size:14px}.bad{color:var(--bad)}.ok{color:var(--blue)}
+.tag{display:inline-block;border:1px solid var(--mut);color:var(--mut);border-radius:6px;padding:0 8px;font-size:13px}
+.tag.approved{border-color:var(--navy);color:#fff;background:var(--navy)}.tag.rejected{border-color:var(--bad);color:var(--bad)}
+.cite{color:var(--mut);font-size:12px}pre b{font-weight:600}
+pre{white-space:pre-wrap;background:#f5f7fb;border-radius:8px;padding:10px 12px;font:13px/1.5 ui-monospace,monospace}
+.banner{border:1px solid var(--blue);background:#eef2fb;border-radius:12px;padding:12px 14px;margin:0 0 16px;font-size:14px}
+</style></head><body><main>
+<h1>Slate<span>.</span> <small style="font-size:15px;color:var(--mut)">AI draft (opt-in demo)</small></h1>
+<p class="sub">This page calls the real LLM through <code>POST /v1/tailor/ai</code>. It only works when the server was started with a key. Sample data only.</p>
+
+<div class="banner"><b>Human review is required.</b> The LLM only sees numbered blocks from the uploaded resume and the job, and every draft line must cite its sources like <span class="cite">[S2]</span>. The server re-checks this mechanically at approval and export: uncited lines, unknown citations, invented numbers or names, and lines whose wording leaves the cited sources all block approval. It is still not a fact check - a cited line can still twist a source's meaning, and qualifier inflation ("advanced Excel") can slip through. Review by eye.</div>
+
+<section id="loginbox"><h2>Sign in</h2>
+<div id="loginctl">Checking sign-in mode...</div>
+<div id="loginmsg" class="msg"></div></section>
+
+<section id="s1"><h2><b>1</b>Resume text</h2>
+<textarea id="resume">Asha Verma
+B.Tech Computer Science, IIITM Gwalior, 2027
+Intern at ExampleCo (3 months)
+Skills: Python, Git, Excel, communication</textarea>
+<div><button id="parse">Parse resume</button></div>
+<div id="parsed" class="msg"></div></section>
+
+<section id="s2" class="off"><h2><b>2</b>Pick a sample job</h2>
+<select id="job"></select>
+<div><button id="gen">Generate AI draft</button></div>
+<div id="genmsg" class="msg"></div></section>
+
+<section id="s3" class="off"><h2><b>3</b>Review the AI draft <span id="status" class="tag">draft</span></h2>
+<div id="flags"></div>
+<h3 style="font-size:14px;margin:10px 0 4px">Tailored resume</h3>
+<pre id="dres"></pre>
+<h3 style="font-size:14px;margin:10px 0 4px">Cover note</h3>
+<pre id="dnote"></pre>
+<div><button id="approve">Approve (human decision)</button><button id="reject" class="sec">Reject</button></div>
+<div id="decision" class="msg"></div></section>
+
+<script>
+let resumeId=null, draftId=null;
+// Small safe renderer: escape first, then map light Markdown to HTML so model
+// output never shows raw ** or ## and can never inject markup.
+function mdRender(t){
+  const esc=(t||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  return esc.split(/\n/).map(l=>{
+    let h=l.replace(/^#{1,4}\s*/,"").trim();
+    h=h.replace(/\*\*([^*]+)\*\*/g,"<b>$1</b>").replace(/\*([^*]+)\*/g,"<i>$1</i>");
+    h=h.replace(/\[(S\d+|J)\]/g,'<span class="cite">[$1]</span>');
+    if(/^[-*\u2022]\s+/.test(h)) return "<div>&bull; "+h.replace(/^[-*\u2022]\s+/,"")+"</div>";
+    return h?"<div>"+h+"</div>":"";
+  }).join("");
+}
+function token(){return sessionStorage.getItem("slate_token")||""}
+async function api(path, method, body){
+  const h={"content-type":"application/json"};
+  if(token()) h["authorization"]="Bearer "+token();
+  const r=await fetch("/v1"+path,{method,headers:h,body:body?JSON.stringify(body):undefined});
+  const j=await r.json().catch(()=>({}));
+  if(r.status===401){await recoverSignIn()}
+  if(!r.ok){throw new Error((j.error&&j.error.message)||r.statusText)}
+  return j;
+}
+function showLogin(note){
+  document.getElementById("loginbox").style.display="";
+  if(note) document.getElementById("loginmsg").innerHTML='<span class="bad">'+note+"</span>";
+}
+let authRecovery=null;
+async function recoverSignIn(){
+  sessionStorage.removeItem("slate_token");
+  showLogin("Sign-in expired or missing - please sign in again. Your saved data is unchanged.");
+  // Rebuild the actual control, not just a message. Never retry a mutation
+  // automatically: the user resumes the action after authenticating.
+  if(!authRecovery) authRecovery=initAuth().finally(()=>{authRecovery=null});
+  await authRecovery;
+}
+function signedIn(email){
+  document.getElementById("loginctl").innerHTML="";
+  document.getElementById("loginmsg").innerHTML='<span class="ok">Signed in as '+String(email||"user").replace(/[<>&]/g,"")+'</span> <button class="sec" id="out">Sign out</button>';
+  document.getElementById("out").onclick=()=>{sessionStorage.removeItem("slate_token");if(window.google?.accounts?.id) google.accounts.id.disableAutoSelect();location.reload()};
+}
+async function initAuth(){
+  let cfg={mode:"unconfigured"};
+  try{cfg=await (await fetch("/v1/config")).json()}catch(e){}
+  const ctl=document.getElementById("loginctl");
+  if(token()){signedIn();return}
+  if(cfg.mode==="dev"){
+    ctl.innerHTML='<input id="devmail" placeholder="you@example.com" style="font:inherit;padding:8px;border:1px solid var(--line);border-radius:8px"> <button id="devgo">Sign in (local dev)</button>';
+    document.getElementById("devgo").onclick=()=>{
+      const m=document.getElementById("devmail").value.trim();
+      if(!m) return;
+      sessionStorage.setItem("slate_token","dev:"+m); signedIn(m);
+    };
+  }else if(cfg.mode==="google"){
+    ctl.innerHTML="<div id=\"gbtn\"></div>";
+    const renderGoogle=()=>{
+      google.accounts.id.initialize({client_id:cfg.googleClientId, callback:(resp)=>{
+        sessionStorage.setItem("slate_token",resp.credential); signedIn();
+      }});
+      google.accounts.id.renderButton(document.getElementById("gbtn"),{theme:"outline",size:"large"});
+    };
+    if(window.google?.accounts?.id){renderGoogle()}
+    else{
+      let script=document.getElementById("google-identity-script");
+      if(!script){
+        script=document.createElement("script");script.id="google-identity-script";
+        script.src="https://accounts.google.com/gsi/client";script.async=true;
+      }
+      script.onload=renderGoogle;
+      script.onerror=()=>showLogin("Google sign-in could not load. Check your connection and reload this page.");
+      if(!script.isConnected) document.head.appendChild(script);
+    }
+  }else if(cfg.mode==="supabase"){
+    ctl.innerHTML='<button id="sbgo">Sign in with Google</button>';
+    const s=document.createElement("script");
+    s.src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"; s.async=true;
+    s.onload=async()=>{
+      const sb=supabase.createClient(cfg.supabaseUrl,cfg.supabaseAnonKey);
+      const sess=await sb.auth.getSession();
+      if(sess.data.session){sessionStorage.setItem("slate_token",sess.data.session.access_token);signedIn(sess.data.session.user.email);return}
+      document.getElementById("sbgo").onclick=()=>sb.auth.signInWithOAuth({provider:"google"});
+    };
+    document.head.appendChild(s);
+  }else{
+    ctl.innerHTML='<span class="bad">Sign-in is not configured on this server. Start it with GOOGLE_CLIENT_ID, or SLATE_DEV_AUTH=1 for local dev.</span>';
+  }
+}
+initAuth();
+document.getElementById("parse").onclick=async()=>{
+  const msg=document.getElementById("parsed");
+  try{
+    const r=await api("/resume","POST",{text:document.getElementById("resume").value});
+    resumeId=r.resumeId;
+    msg.innerHTML="Parsed as "+resumeId+" - skills: "+(r.parsed.skills.join(", ")||"none found");
+    const j=await api("/jobs","GET");
+    const sel=document.getElementById("job");
+    sel.innerHTML=j.jobs.map(x=>`<option value="${x.jobId}">${x.title} at ${x.company}</option>`).join("");
+    document.getElementById("s2").classList.remove("off");
+  }catch(e){msg.innerHTML='<span class="bad">'+e.message+"</span>"}
+};
+document.getElementById("gen").onclick=async()=>{
+  const msg=document.getElementById("genmsg");
+  try{
+    const d=await api("/tailor/ai","POST",{resumeId,jobId:document.getElementById("job").value});
+    draftId=d.draftId;
+    msg.innerHTML='AI draft '+draftId+' created (requiresApproval: '+d.requiresApproval+')';
+    document.getElementById("dres").innerHTML=mdRender(d.tailoredResume);
+    document.getElementById("dnote").innerHTML=mdRender(d.coverNote);
+    const f=[];
+    if(d.flaggedClaims&&d.flaggedClaims.length)f.push("Skills the resume does not list: "+d.flaggedClaims.join(", "));
+    (d.violations||[]).forEach(v=>f.push(v));
+    document.getElementById("flags").innerHTML=f.length
+      ?'<div class="warn"><b>Claim rule warnings - check these before approving:</b><ul>'+f.map(x=>"<li>"+x+"</li>").join("")+"</ul></div>"
+      :'<div class="msg ok">No rule-detectable unsupported claim. That is not a fact check - still review by eye.</div>';
+    document.getElementById("s3").classList.remove("off");
+  }catch(e){msg.innerHTML='<span class="bad">'+e.message+"</span>"}
+};
+async function decide(what){
+  const el=document.getElementById("decision");
+  try{
+    const r=await api("/approvals","POST",{draftId,decision:what});
+    document.getElementById("status").textContent=r.status;
+    document.getElementById("status").className="tag "+r.status;
+    el.innerHTML='Decision stored: '+r.status;
+  }catch(e){el.innerHTML='<span class="bad">'+e.message+"</span>"}
+}
+document.getElementById("approve").onclick=()=>decide("approve");
+document.getElementById("reject").onclick=()=>decide("reject");
+// Auto-demo: /ai#demo runs parse > generate without clicks (used for demos and screenshots).
+// #demo-approve / #demo-reject also click the decision so demos can show the outcome.
+if(location.hash.startsWith("#demo")){
+  document.getElementById("parse").click();
+  const t1=setInterval(()=>{ if(!resumeId)return; clearInterval(t1);
+    document.getElementById("gen").click();
+    const t2=setInterval(()=>{ if(!draftId)return; clearInterval(t2);
+      if(location.hash==="#demo-approve")document.getElementById("approve").click();
+      if(location.hash==="#demo-reject")document.getElementById("reject").click();
+    },100);
+  },100);
+}
+</script>
+</main></body></html>
