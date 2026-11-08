@@ -90,7 +90,10 @@ def _mount(r: APIRouter, get_svc):
                 text = extract_pdf_text(data)
             except ParseError as e:
                 raise SlateError("resume_unreadable", str(e))
-            return svc.upload_resume(text)
+            result = svc.upload_resume(text)
+            result["sourceText"] = text
+            result["sourceTextKind"] = "original_uploaded_text_not_user_addendum"
+            return result
 
     @r.get("/resume")
     def list_resumes(request: Request):
