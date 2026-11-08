@@ -1,6 +1,6 @@
 import io
 import re
-from .skills import skill_evidence, explicit_skill_evidence
+from .skills import skill_evidence, resume_skill_evidence
 
 MAX_PDF_BYTES = 5 * 1024 * 1024
 
@@ -16,10 +16,7 @@ def parse_resume(text: str) -> dict:
     if not lines:
         raise ParseError("No resume content remains after removing template guidance.")
     name = lines[0] if len(lines[0].split()) <= 5 and "@" not in lines[0] else "Unknown"
-    evidence = skill_evidence(text)
-    seen = {item["skill"] for item in evidence}
-    evidence += [item for item in explicit_skill_evidence(text) if item["skill"] not in seen]
-    evidence.sort(key=lambda item: item["skill"])
+    evidence, uncertain = resume_skill_evidence(text)
     skills = [item["skill"] for item in evidence]
     education, experience = [], []
     for l in lines:
@@ -33,7 +30,7 @@ def parse_resume(text: str) -> dict:
             experience.append({"title": m.group(1).title(), "org": m.group(2).strip(),
                                "months": int(m.group(3)) if m.group(3) else None})
     return {"name": name, "skills": skills, "education": education, "experience": experience,
-            "skillEvidence": evidence,
+            "skillEvidence": evidence, "uncertainSkills": uncertain,
             "parseWarnings": ["Skill candidates from phrase matches and explicit lists, not verified proficiency or a complete resume assessment. "
                               "Review the detected skills; education and work-history extraction are limited."]}
 
