@@ -5,6 +5,11 @@ from .resume_review import section_previews
 
 MAX_PDF_BYTES = 5 * 1024 * 1024
 
+_QUALIFICATION_UNCERTAIN = re.compile(
+    r"\b(?:no|not|never|without|lack|lacking|unfamiliar|seeking|aspir(?:e|es|ing)|"
+    r"want(?:s)? to|wish(?:es)? to|plan(?:s|ning)? to|hop(?:e|es|ing) to|"
+    r"interested in|learning|learn|instruction|example|pursuing|prospective)\b", re.I)
+
 class ParseError(ValueError):
     pass
 
@@ -20,7 +25,7 @@ def parse_resume(text: str) -> dict:
     evidence, uncertain = resume_skill_evidence(text)
     skills = [item["skill"] for item in evidence]
     education, experience = [], []
-    for l in lines:
+    for l in qualification_lines(text):
         m = re.search(r"(?<![a-z])(b\.?tech|m\.?tech|bca|mca|b\.?sc|m\.?sc|bachelor|master)(?![a-z])[^,\n]*", l, re.I)
         if m:
             y = re.search(r"(20\d\d)", l)
@@ -35,6 +40,30 @@ def parse_resume(text: str) -> dict:
             "sectionReview": section_previews(text),
             "parseWarnings": ["Skill candidates from phrase matches and explicit lists, not verified proficiency or a complete resume assessment. "
                               "Review the detected skills; education and work-history extraction are limited."]}
+
+def qualification_lines(text):
+    """Conservative literal lines eligible for degree/work extraction, not proof."""
+    excluded_section = False
+    text = _without_template_tips(text)
+    for l in text.splitlines():
+        l = l.strip()
+        label = l.casefold().rstrip(':：')
+        if label.startswith("user-provided skill statements"):
+            excluded_section = True
+            continue
+        if label in {"career objective", "objective", "career goals", "learning goals", "job requirements", "required qualifications", "example", "example experience", "instructions", "tips"}:
+            excluded_section = True
+            continue
+        if label in {"education", "qualifications", "academic background", "experience", "work experience", "employment", "employment history", "professional experience", "skills", "key skills", "technical skills", "projects"}:
+            excluded_section = False
+            continue
+        # A literal degree/job-title mention is not necessarily a qualification.
+        # Conservative exclusion keeps ambiguous text available for source review
+        # rather than promoting a denial, aspiration or example into history.
+        if excluded_section or _QUALIFICATION_UNCERTAIN.search(l):
+            continue
+        yield l
+
 
 def find_skills(text: str) -> list:
     """Canonical skill mentions, including supported spelling/phrase aliases.
