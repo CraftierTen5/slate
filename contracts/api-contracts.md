@@ -51,6 +51,7 @@ Response:
     "matchedSkills": ["python", "sql"],
     "missingSkills": ["statistics"],
     "reason": "Matches 2 of 3 required skills: python, sql. Missing: statistics.",
+    "freshness": "active",
     "deadline": "2026-11-30",
     "url": "https://..."
   }]
@@ -60,6 +61,8 @@ Response:
 `matchScore` is 0-1, computed by the matching agent. Sample listings are fine until a real jobs source is chosen.
 
 `matchedSkills`, `missingSkills` and `reason` explain the score: which of the listing's required skills the resume has, which it lacks, and one plain sentence combining the two. They are additive - older consumers can ignore them. Without a `resumeId`, `matchedSkills` is empty and `missingSkills` lists every required skill.
+
+`freshness` is the listing's freshness state, one of `active`, `stale`, `no_longer_listed`, `unknown`, `closed` (see slate_core/jobs_curation.py for exact meanings). It is additive and never removes a listing from the response; a date-only, timezone-naive or unparseable deadline never marks a listing `closed`. While the sample data is the source, `active` describes the demo fixture only: the static sample list counts as the demo source's latest refresh, so it is not evidence that a real employer's posting is open. The `location` filter is normalized on both sides - case- and whitespace-insensitive, common city aliases match (`Bangalore` finds `Bengaluru`), and every place named in a multi-city label ("Bengaluru, Mumbai") matches. A label starting with `Remote` keeps its region restriction: "Remote, India" is matched only by that full label, never by a plain `Remote` search.
 
 Skill matching ignores case and surrounding whitespace on both the resume and the listing. A skill a listing repeats counts once, and `matchScore` is computed from the same matched/missing split as `reason`, so they always agree.
 
