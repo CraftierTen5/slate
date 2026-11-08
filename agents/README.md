@@ -127,3 +127,20 @@ previously typed text. The optional browser check covers four same-source late
 approval/error cases plus PDF -> reparse source consistency. AI draft responses
 in these tests are synthetic browser fixtures; no model is called. Server-side
 approval/export checks remain authoritative, not the UI badge.
+
+### Qualification context limits
+
+Degree/job-title phrases in negative, aspirational or recognized instructional
+lines/sections are not promoted into structured education/work history. Degree
+claim checks use the same conservative eligible-source lines, excluding explicit
+template tips and review skill addenda. A self-reported skill named Bachelor is
+not degree evidence. Original text and literal section previews stay available
+for user review. Existing parsed snapshots are not silently migrated; reparse
+the original source to apply new extraction rules.
+
+These are English literal/context rules, not semantic qualification verification.
+They can omit real history in mixed/negated sentences or unfamiliar sections;
+incomplete credentials such as 'pursuing' are not treated as completed degrees.
+General structured school/nontechnical work extraction, multilingual negation,
+layout recovery and positive completion-status review remain open. No proof of
+employment/degree authenticity follows from a positive phrase.
