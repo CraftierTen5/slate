@@ -29,3 +29,25 @@ Negative, aspirational and explicitly instructional English contexts are flagged
 positive mention can support the same candidate. Context rules are conservative,
 not general semantic negation detection in every language. This filter applies
 only when parsing a resume; draft claim checks still detect all known mentions.
+
+### Review/correct skill candidates
+
+The classic page lets a signed-in user edit a short skill list and explicitly
+confirm it. Saving calls `POST /v1/resume/{rid}/skills/review` with `skills` and
+strict boolean `confirm:true`. This creates a new resume ID. Source phrase
+records remain distinct from user-provided additions; none is independently
+verified competence. Additions are explicit self-reported statements in a labeled
+source addendum for this new version, never silently attributed to the PDF.
+Original text and prior parsed versions remain intact. Existing approved drafts
+bound to the corrected parent or its ancestor versions are reset to draft; rejected drafts and
+other users/resume IDs are untouched. New drafts require their own approval.
+The same claim and AI evidence checks still run. A self-reported skill does not
+establish employment, qualifications, durations, metrics or professional ability.
+
+Literal education/work-history section previews now distinguish recognized
+source sections needing review from unrecognized sections. Empty structured
+arrays do not mean the person has no qualifications or experience. These previews
+are bounded excerpts, not complete document reconstruction; general multi-column
+and qualification normalization remain unfinished. Stored review snapshots and
+metadata survive the existing per-user persistence path, subject to its current
+single-process and privacy limitations. No public sharing is performed.
