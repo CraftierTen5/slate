@@ -16,6 +16,7 @@ def build_roadmap(parsed: dict, target_role: str) -> list:
     out = []
     for s in ordered:
         title, resources, weeks = LEARNING.get(s, (f"Learn {s}", [], 2))
-        out.append({"title": title, "why": f"Gap for target role: '{s}' is in the {target_role} listings but not on your resume.",
+        out.append({"title": title,
+                    "why": f"Gap for target role: '{s}' appears in {count[s]} of {len(jobs)} {target_role} sample listings but not on your resume.",
                     "resources": resources, "etaWeeks": weeks, "skill": s})
     return out
