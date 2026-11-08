@@ -122,7 +122,7 @@ function showParsed(p,label){
 }
 async function loadJobs(){
   const j=await api("GET","/jobs?resumeId="+rid);
-  $("jobs").innerHTML=j.jobs.map(x=>`<div class="job"><div><b>${esc(x.title)}</b><br><small>${esc(x.company)} · ${esc(x.location)} · apply by ${esc(x.deadline)}</small></div><div><span class="score">${Math.round(x.matchScore*100)}%</span> <button data-j="${x.jobId}">Tailor</button></div></div>`).join("");
+  $("jobs").innerHTML=j.jobs.map(x=>`<div class="job"><div><b>${esc(x.title)}</b><br><small>${esc(x.company)} · ${esc(x.location)} · apply by ${esc(x.deadline)} · Demo fixture: ${esc(x.freshness||"unknown")} (not live-verified)</small><br><small>${esc(x.reason||"")}</small></div><div><span class="score">${Math.round(x.matchScore*100)}%</span> <button data-j="${esc(x.jobId)}">Tailor</button></div></div>`).join("");
   document.querySelectorAll("[data-j]").forEach(b=>b.onclick=()=>tailor(b.dataset.j));
   on("s2");on("s4");on("s5");
 }
@@ -151,8 +151,9 @@ $("edit").onclick=async()=>{try{
 $("approve").onclick=async()=>{try{const r=await api("POST","/approvals",{draftId:did,decision:"approve"});setStatus(r.status);say("dmsg","Saved draft approved in this demo. Review it yourself before using it anywhere.")}catch(e){say("dmsg",e.message,1)}};
 $("reject").onclick=async()=>{try{const r=await api("POST","/approvals",{draftId:did,decision:"reject"});setStatus(r.status);say("dmsg","Rejected. This draft cannot be used.")}catch(e){say("dmsg",e.message,1)}};
 $("export").onclick=async()=>{try{await api("GET","/drafts/"+did+"/export");say("dmsg","Export allowed by the demo gate: this saved version is approved and no rule-detectable unsupported claim was found. Not a fact check; review it yourself.")}catch(e){say("dmsg",e.message,1)}};
+const resLink=x=>{const i=x.lastIndexOf(" - http");if(i<0)return esc(x);const u=x.slice(i+3);return /^https:\/\//.test(u)?`<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(x.slice(0,i))}</a>`:esc(x)};
 $("road").onclick=async()=>{try{const r=await api("POST","/roadmap",{resumeId:rid,targetRole:"Data Analyst"});
-  $("roadlist").innerHTML=r.milestones.map(m=>`<li><b>${esc(m.title)}</b> · ${m.etaWeeks} wk<br><small>${esc(m.why)}</small></li>`).join("")}catch(e){$("roadlist").innerHTML='<li class="bad">'+esc(e.message)+"</li>"}};
+  $("roadlist").innerHTML=r.milestones.map(m=>`<li><b>${esc(m.title)}</b> · ${m.etaWeeks} wk<br><small>${esc(m.why)}</small><br><small>${m.resources.map(resLink).join(" · ")}</small></li>`).join("")}catch(e){$("roadlist").innerHTML='<li class="bad">'+esc(e.message)+"</li>"}};
 let qs=0;
 function showQ(t){$("iv").innerHTML=`<div class="q">${esc(t)}</div><textarea id="ans" style="min-height:70px"></textarea><button id="send">Answer</button><div id="fb" class="msg"></div>`;$("send").onclick=answer}
 $("start").onclick=async()=>{try{const r=await api("POST","/interview/mock",{targetRole:"Data Analyst"});sid=r.sessionId;showQ(r.firstQuestion);
