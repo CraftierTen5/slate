@@ -63,17 +63,26 @@ async function api(method,path,body){
   if(token()) h["authorization"]="Bearer "+token();
   const r=await fetch("/v1"+path,{method,headers:h,body:body?JSON.stringify(body):undefined});
   const j=await r.json();
-  if(r.status===401){sessionStorage.removeItem("slate_token");showLogin("Sign-in expired or missing - please sign in again.")}
+  if(r.status===401){await recoverSignIn()}
   if(!r.ok) throw new Error(j.error?j.error.message:"Request failed"); return j;
 }
 function showLogin(note){
   $("loginbox").style.display="";
   if(note) $("loginmsg").innerHTML='<span class="bad">'+esc(note)+"</span>";
 }
+let authRecovery=null;
+async function recoverSignIn(){
+  sessionStorage.removeItem("slate_token");
+  showLogin("Sign-in expired or missing - please sign in again. Your saved data is unchanged.");
+  // Rebuild the actual control, not just a message. Never retry a mutation
+  // automatically: the user resumes the action after authenticating.
+  if(!authRecovery) authRecovery=initAuth().finally(()=>{authRecovery=null});
+  await authRecovery;
+}
 function signedIn(email){
   $("loginctl").innerHTML="";
   $("loginmsg").innerHTML='<span class="ok">Signed in as '+esc(email||"user")+'</span> <button class="sec" id="out">Sign out</button>';
-  $("out").onclick=()=>{sessionStorage.removeItem("slate_token");location.reload()};
+  $("out").onclick=()=>{sessionStorage.removeItem("slate_token");if(window.google?.accounts?.id) google.accounts.id.disableAutoSelect();location.reload()};
 }
 async function initAuth(){
   let cfg={mode:"unconfigured"};
@@ -86,15 +95,23 @@ async function initAuth(){
       sessionStorage.setItem("slate_token","dev:"+m); signedIn(m);};
   }else if(cfg.mode==="google"){
     ctl.innerHTML="<div id=\"gbtn\"></div>";
-    const s=document.createElement("script");
-    s.src="https://accounts.google.com/gsi/client"; s.async=true;
-    s.onload=()=>{
+    const renderGoogle=()=>{
       google.accounts.id.initialize({client_id:cfg.googleClientId, callback:(resp)=>{
         sessionStorage.setItem("slate_token",resp.credential); signedIn();
       }});
       google.accounts.id.renderButton($("gbtn"),{theme:"outline",size:"large"});
     };
-    document.head.appendChild(s);
+    if(window.google?.accounts?.id){renderGoogle()}
+    else{
+      let script=document.getElementById("google-identity-script");
+      if(!script){
+        script=document.createElement("script");script.id="google-identity-script";
+        script.src="https://accounts.google.com/gsi/client";script.async=true;
+      }
+      script.onload=renderGoogle;
+      script.onerror=()=>showLogin("Google sign-in could not load. Check your connection and reload this page.");
+      if(!script.isConnected) document.head.appendChild(script);
+    }
   }else if(cfg.mode==="supabase"){
     ctl.innerHTML='<button id="sbgo">Sign in with Google</button>';
     const s=document.createElement("script");
@@ -122,7 +139,7 @@ function showParsed(p,label){
 }
 async function loadJobs(){
   const j=await api("GET","/jobs?resumeId="+rid);
-  $("jobs").innerHTML=j.jobs.map(x=>`<div class="job"><div><b>${esc(x.title)}</b><br><small>${esc(x.company)} · ${esc(x.location)} · apply by ${esc(x.deadline)}</small></div><div><span class="score">${Math.round(x.matchScore*100)}%</span> <button data-j="${x.jobId}">Tailor</button></div></div>`).join("");
+  $("jobs").innerHTML=j.jobs.map(x=>`<div class="job"><div><b>${esc(x.title)}</b><br><small>${esc(x.company)} · ${esc(x.location)} · apply by ${esc(x.deadline)} · Demo fixture: ${esc(x.freshness||"unknown")} (not live-verified)</small><br><small>${esc(x.reason||"")}</small></div><div><span class="score">${Math.round(x.matchScore*100)}%</span> <button data-j="${esc(x.jobId)}">Tailor</button></div></div>`).join("");
   document.querySelectorAll("[data-j]").forEach(b=>b.onclick=()=>tailor(b.dataset.j));
   on("s2");on("s4");on("s5");
 }
@@ -134,7 +151,7 @@ $("pdffile").onchange=async()=>{const f=$("pdffile").files[0];if(!f)return;try{
   const fd=new FormData();fd.append("file",f);
   const ph={}; if(token()) ph["authorization"]="Bearer "+token();
   const res=await fetch("/v1/resume/pdf",{method:"POST",headers:ph,body:fd});
-  if(res.status===401){sessionStorage.removeItem("slate_token");showLogin("Sign-in expired or missing - please sign in again.")}
+  if(res.status===401){await recoverSignIn()}
   const j=await res.json(); if(!res.ok) throw new Error(j.error?j.error.message:"Upload failed");
   rid=j.resumeId; showParsed(j.parsed,"Uploaded PDF: "+f.name); await loadJobs();
 }catch(e){say("parsed",e.message,1)}};
@@ -151,8 +168,9 @@ $("edit").onclick=async()=>{try{
 $("approve").onclick=async()=>{try{const r=await api("POST","/approvals",{draftId:did,decision:"approve"});setStatus(r.status);say("dmsg","Saved draft approved in this demo. Review it yourself before using it anywhere.")}catch(e){say("dmsg",e.message,1)}};
 $("reject").onclick=async()=>{try{const r=await api("POST","/approvals",{draftId:did,decision:"reject"});setStatus(r.status);say("dmsg","Rejected. This draft cannot be used.")}catch(e){say("dmsg",e.message,1)}};
 $("export").onclick=async()=>{try{await api("GET","/drafts/"+did+"/export");say("dmsg","Export allowed by the demo gate: this saved version is approved and no rule-detectable unsupported claim was found. Not a fact check; review it yourself.")}catch(e){say("dmsg",e.message,1)}};
+const resLink=x=>{const i=x.lastIndexOf(" - http");if(i<0)return esc(x);const u=x.slice(i+3);return /^https:\/\//.test(u)?`<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(x.slice(0,i))}</a>`:esc(x)};
 $("road").onclick=async()=>{try{const r=await api("POST","/roadmap",{resumeId:rid,targetRole:"Data Analyst"});
-  $("roadlist").innerHTML=r.milestones.map(m=>`<li><b>${esc(m.title)}</b> · ${m.etaWeeks} wk<br><small>${esc(m.why)}</small></li>`).join("")}catch(e){$("roadlist").innerHTML='<li class="bad">'+esc(e.message)+"</li>"}};
+  $("roadlist").innerHTML=r.milestones.map(m=>`<li><b>${esc(m.title)}</b> · ${m.etaWeeks} wk<br><small>${esc(m.why)}</small><br><small>${m.resources.map(resLink).join(" · ")}</small></li>`).join("")}catch(e){$("roadlist").innerHTML='<li class="bad">'+esc(e.message)+"</li>"}};
 let qs=0;
 function showQ(t){$("iv").innerHTML=`<div class="q">${esc(t)}</div><textarea id="ans" style="min-height:70px"></textarea><button id="send">Answer</button><div id="fb" class="msg"></div>`;$("send").onclick=answer}
 $("start").onclick=async()=>{try{const r=await api("POST","/interview/mock",{targetRole:"Data Analyst"});sid=r.sessionId;showQ(r.firstQuestion);
