@@ -32,3 +32,11 @@ def test_url_fragments_never_trigger_mutations_or_auto_decisions():
     assert 'location.hash' not in s
     assert 'setInterval(' not in s
     assert 'URL fragments never authorize' in s
+
+
+@pytest.mark.parametrize('page',['index.html','ai.html'])
+def test_draft_epoch_is_independent_of_source_epoch(page):
+    html=(ROOT/'web'/page).read_text()
+    assert 'draftGeneration' in html
+    assert 'epoch!==draftGeneration' in html
+    assert ('requested!==did' if page=='index.html' else 'requested!==draftId') in html
