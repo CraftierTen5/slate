@@ -137,7 +137,7 @@ const on=id=>$(id).classList.remove("off");
 function say(id,t,bad){$(id).className="msg "+(bad?"bad":"ok");$(id).textContent=t}
 function showParsed(p,label){
   $("parsed").className="msg";
-  $("parsed").innerHTML=(label?esc(label)+"<br>":"")+"<b>"+esc(p.name)+"</b><br>"+p.skills.map(s=>'<span class="chip">'+esc(s)+"</span>").join("")+(p.skills.length?"":"<p>No supported skill phrases detected. This does not mean you have no skills.</p>")+'<p class="note">'+esc((p.parseWarnings||[]).join(" "))+'</p>'+(p.skillEvidence?.length?'<details><summary>Why these skills were detected</summary><ul>'+p.skillEvidence.map(e=>'<li>'+esc(e.skill)+': &quot;'+esc(e.matchedText)+'&quot;</li>').join("")+'</ul></details>':"");
+  $("parsed").innerHTML=(label?esc(label)+"<br>":"")+"<b>"+esc(p.name)+"</b><br>"+p.skills.map(s=>'<span class="chip">'+esc(s)+"</span>").join("")+(p.skills.length?"":"<p>No supported skill phrases detected. This does not mean you have no skills.</p>")+'<p class="note">'+esc((p.parseWarnings||[]).join(" "))+'</p>'+(p.skillEvidence?.length?'<details><summary>Why these skills were detected</summary><ul>'+p.skillEvidence.map(e=>'<li>'+esc(e.skill)+': &quot;'+esc(e.matchedText)+'&quot;</li>').join("")+'</ul></details>':"")+(p.uncertainSkills?.length?'<p class="note">Not counted without review: '+p.uncertainSkills.map(e=>esc(e.skill)+" ("+esc(e.reason)+")").join("; ")+"</p>":"");
 }
 async function loadJobs(){
   const j=await api("GET","/jobs?resumeId="+rid);
