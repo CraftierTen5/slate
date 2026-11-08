@@ -78,3 +78,21 @@ test environment, then run `python scripts/check_session_ui.py`. Use
 Python environment is different. It starts a temporary dev-auth server and
 SQLite DB, tests both pages against eight delayed account-switch cases, and
 calls no models/providers. This is not enabled in CI.
+
+### Concurrent snapshot writes
+
+Authenticated SQL-backed requests use atomic document compare-and-set when
+saving. If another process changed the same user's snapshot since it was
+loaded, the losing request returns409`state_conflict`, without overwriting the
+winner. Reopen the latest version before deliberately retrying. Automatic retry
+is avoided because a request may already have called a model. A conflict can
+therefore consume a model request without saving its output.
+
+This requires no schema migration. The comparison uses the exact stored JSON,
+not a reserialized approximation. It is document-value conflict detection,
+not an event/revision ledger. SQLite multiprocess insert/update races, stale
+approval after review, deletion, and per-user independence have local tests.
+Postgres was not run. Whole-document rewriting and database lock timeouts remain
+limits; SQL operational failures are not automatically retried. The memory
+store is still single-process/ephemeral, and legacy `SqlSnapshot` and direct
+unconditional `SqlUserStore.save` are not the authenticated concurrency path.
