@@ -153,3 +153,41 @@ def test_unknown_skill_values_are_bounded_and_do_not_execute_markup():
 def test_wrapped_skill_prose_does_not_turn_continuations_into_skills():
     parsed = parse_resume("Alex Example\nKey Skills\n• Numeracy skills for cash handling tasks proven by maths\nsubjects.\n• Communication skills shown by positive feedback from\nsupervisors after completing work experience.\n• Ability to work as part of a team since the\nage of eight.\nEducation\nExample College")
     assert set(parsed["skills"]) == {"cash handling", "numeracy", "communication", "teamwork"}
+
+
+@pytest.mark.parametrize("sentence, skill", [
+    ("No experience with SQL", "sql"),
+    ("I have never used Python", "python"),
+    ("I want to learn PostgreSQL", "postgresql"),
+    ("Currently learning customer service", "customer service"),
+    ("Seeking customer service work", "customer service"),
+    ("Skills to learn:\nPython\nSQL", "python"),
+    ("Job requirements:\nExcel and Tableau", "excel"),
+    ("Skills: no wound care", "no wound care"),
+])
+def test_negative_aspirational_and_instructional_mentions_are_not_counted(sentence, skill):
+    parsed = parse_resume("Alex Example\n" + sentence)
+    assert skill not in parsed["skills"]
+    assert skill in [e["skill"] for e in parsed["uncertainSkills"]]
+    assert all(e["reason"] for e in parsed["uncertainSkills"])
+
+
+def test_positive_evidence_elsewhere_can_support_an_aspirational_mention():
+    parsed = parse_resume("Alex Example\nSeeking customer service work.\nWork Experience\nCustomer service volunteer at a canteen.")
+    assert "customer service" in parsed["skills"]
+    assert not any(e["skill"] == "customer service" for e in parsed["uncertainSkills"])
+
+
+def test_open_vocabulary_candidates_do_not_allow_known_unsupported_claims():
+    source = "Alex Example\nSkills: wound care, Rust\nNo experience with SQL"
+    parsed = parse_resume(source)
+    assert "wound care" in parsed["skills"]
+    assert "sql" not in parsed["skills"]
+    assert any("sql" in v for v in validate(parsed, source, "Skills: SQL, wound care"))
+    assert any("postgresql" in v for v in validate(parsed, source, "I use Postgres"))
+
+
+def test_instructional_section_stops_at_real_skill_heading():
+    parsed = parse_resume("Alex Example\nRequired Skills:\nPython, SQL\nSkills: cash handling\nEducation\nExample School")
+    assert parsed["skills"] == ["cash handling"]
+    assert {e["skill"] for e in parsed["uncertainSkills"]} == {"python", "sql"}
