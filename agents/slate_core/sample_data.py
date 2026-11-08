@@ -24,7 +24,7 @@ KNOWN_SKILLS = sorted({s for j in JOBS for s in j["skills"]} | {"java", "c++", "
 # Learning step per skill, used by the roadmap.
 LEARNING = {
     # (milestone title, [free resource links], eta weeks). Links verified reachable on 2026-11-08.
-    "sql": ("SQL fundamentals", ["Mode SQL tutorial - https://mode.com/sql-tutorial/", "SQLBolt - https://sqlbolt.com/"], 2),
+    "sql": ("SQL fundamentals", ["ThoughtSpot SQL tutorial (formerly Mode) - https://mode.com/sql-tutorial/", "SQLBolt - https://sqlbolt.com/"], 2),
     "python": ("Python basics to projects", ["Official Python tutorial - https://docs.python.org/3/tutorial/"], 3),
     "excel": ("Excel for analysis", ["Microsoft Excel help & learning - https://support.microsoft.com/en-us/excel"], 1),
     "statistics": ("Statistics essentials", ["Khan Academy statistics - https://www.khanacademy.org/math/statistics-probability"], 3),
