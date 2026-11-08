@@ -116,3 +116,63 @@ def explicit_skill_evidence(text):
             if len(out) >= 64:
                 return out
     return out
+
+
+_UNCERTAIN = re.compile(
+    r"\b(?:no|not|never|without|lack|lacking|unfamiliar|want(?:s)? to learn|"
+    r"wish(?:es)? to learn|plan(?:s|ning)? to learn|learning|learn|seeking|"
+    r"aspir(?:e|es|ing)|interested in|hop(?:e|es|ing) to|instruction)\b", re.I)
+_INSTRUCTION_HEADING = re.compile(
+    r"^(?:required skills|desired skills|skills to learn|learning goals|"
+    r"example skills|job requirements|instructions|tips)\s*[:：]?\s*(.*)$", re.I)
+
+
+def _review_text(text):
+    """Tag known instructional sections; preserve line boundaries for context."""
+    instruction, lines = False, []
+    for line in text.splitlines():
+        clean = line.strip()
+        if _INSTRUCTION_HEADING.fullmatch(clean):
+            instruction = True
+        elif _SKILL_HEADING.fullmatch(clean) or _SECTION_HEADING.fullmatch(clean):
+            instruction = False
+        lines.append(("instruction: " if instruction else "") + clean)
+    low = unicodedata.normalize("NFKC", "\n".join(lines)).casefold()
+    low = re.sub(r"[\u2010-\u2015]", "-", low)
+    return re.sub(r"[^\S\n]+", " ", low)
+
+
+def _context(low, match):
+    start = max((low.rfind(c, 0, match.start()) for c in "\n.!?;"), default=-1) + 1
+    ends = [low.find(c, match.end()) for c in "\n.!?;"]
+    end = min((i for i in ends if i >= 0), default=len(low))
+    return low[start:end]
+
+
+def resume_skill_evidence(text):
+    """Separate plain mentions from negative/aspirational/instructional contexts.
+
+    Conservative context flags are not a semantic guarantee. A positive mention
+    elsewhere can support a candidate even if a separate mention is uncertain.
+    Draft claim checking deliberately uses unfiltered skill_evidence instead.
+    """
+    low, accepted, flagged = _review_text(text), {}, {}
+    for skill, aliases in sorted(SKILL_ALIASES.items()):
+        for phrase in (skill,) + aliases:
+            pattern = r"(?<![\w+#])" + re.escape(phrase).replace(r"\ ", r"[\s-]+") + r"(?![\w+#])"
+            for match in re.finditer(pattern, low):
+                e = {"skill": skill, "matchedText": match.group(0), "source": "known_phrase"}
+                if _UNCERTAIN.search(_context(low, match)):
+                    flagged.setdefault(skill, dict(e, reason="Negative, aspirational or instructional context; not counted without review."))
+                else:
+                    accepted.setdefault(skill, e)
+    for e in explicit_skill_evidence(text):
+        if e["skill"] in accepted:
+            continue
+        phrase = re.escape(normalized(e["matchedText"])).replace(r"\ ", r"\s+")
+        matches = list(re.finditer(phrase, low))
+        if matches and any(not _UNCERTAIN.search(_context(low, m)) for m in matches):
+            accepted[e["skill"]] = e
+        else:
+            flagged.setdefault(e["skill"], dict(e, reason="Negative, aspirational or instructional context; not counted without review."))
+    return sorted(accepted.values(), key=lambda e: e["skill"]), [flagged[k] for k in sorted(flagged) if k not in accepted]
