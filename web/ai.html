@@ -55,10 +55,10 @@ Skills: Python, Git, Excel, communication</textarea>
 <div id="decision" class="msg"></div></section>
 
 <script>
-let resumeId=null, draftId=null, sourceGeneration=0, sourceRequest=0;
+let resumeId=null, draftId=null, sourceGeneration=0, sourceRequest=0, draftGeneration=0;
 class StaleResponse extends Error {}
 function resetAccountState(){
-  sourceRequest++;sourceGeneration++;resumeId=null;draftId=null;
+  sourceRequest++;sourceGeneration++;draftGeneration++;resumeId=null;draftId=null;
   ["resume","parsed","job","genmsg","dres","dnote","flags","decision"].forEach(id=>{const e=document.getElementById(id);if("value" in e)e.value="";e.textContent=""});
   ["s2","s3"].forEach(id=>document.getElementById(id).classList.add("off"));
   document.getElementById("status").textContent="draft";
@@ -162,7 +162,7 @@ document.getElementById("parse").onclick=async()=>{
   const msg=document.getElementById("parsed");
   try{
     const r=await api("/resume","POST",{text:document.getElementById("resume").value});
-    sourceGeneration++;draftId=null;resumeId=r.resumeId;
+    sourceGeneration++;draftGeneration++;draftId=null;resumeId=r.resumeId;
     document.getElementById("s3").classList.add("off");
     ["dres","dnote","flags","decision","genmsg"].forEach(id=>document.getElementById(id).textContent="");
     msg.textContent="Detected skill phrases: "+(r.parsed.skills.join(", ")||"none found; this does not mean you have no skills")+". "+(r.parsed.parseWarnings||[]).join(" ")+" Not counted without review: "+(r.parsed.uncertainSkills||[]).map(e=>e.skill).join(", ")+". Job choices below are five analyst/tech fixtures, not inferred career targets; retail/customer-service roles are not covered.";
@@ -173,10 +173,14 @@ document.getElementById("parse").onclick=async()=>{
   }catch(e){if(e instanceof StaleResponse)return;msg.innerHTML='<span class="bad">'+e.message+"</span>"}
 };
 document.getElementById("gen").onclick=async()=>{
+  const epoch=++draftGeneration;
   const msg=document.getElementById("genmsg");
   try{
     const d=await api("/tailor/ai","POST",{resumeId,jobId:document.getElementById("job").value});
-    draftId=d.draftId;
+    if(epoch!==draftGeneration)return;draftId=d.draftId;
+    document.getElementById("status").textContent="draft";
+    document.getElementById("status").className="tag draft";
+    document.getElementById("decision").textContent="";
     msg.innerHTML='AI draft '+draftId+' created (requiresApproval: '+d.requiresApproval+')';
     document.getElementById("dres").innerHTML=mdRender(d.tailoredResume);
     document.getElementById("dnote").innerHTML=mdRender(d.coverNote);
@@ -187,30 +191,21 @@ document.getElementById("gen").onclick=async()=>{
       ?'<div class="warn"><b>Claim rule warnings - check these before approving:</b><ul>'+f.map(x=>"<li>"+x+"</li>").join("")+"</ul></div>"
       :'<div class="msg ok">No rule-detectable unsupported claim. That is not a fact check - still review by eye.</div>';
     document.getElementById("s3").classList.remove("off");
-  }catch(e){if(e instanceof StaleResponse)return;msg.innerHTML='<span class="bad">'+e.message+"</span>"}
+  }catch(e){if(e instanceof StaleResponse||epoch!==draftGeneration)return;msg.innerHTML='<span class="bad">'+e.message+"</span>"}
 };
 async function decide(what){
+  const epoch=draftGeneration,requested=draftId;
   const el=document.getElementById("decision");
   try{
     const r=await api("/approvals","POST",{draftId,decision:what});
+    if(epoch!==draftGeneration||requested!==draftId)return;
     document.getElementById("status").textContent=r.status;
     document.getElementById("status").className="tag "+r.status;
     el.innerHTML='Decision stored: '+r.status;
-  }catch(e){if(e instanceof StaleResponse)return;el.innerHTML='<span class="bad">'+e.message+"</span>"}
+  }catch(e){if(e instanceof StaleResponse||epoch!==draftGeneration||requested!==draftId)return;el.innerHTML='<span class="bad">'+e.message+"</span>"}
 }
 document.getElementById("approve").onclick=()=>decide("approve");
 document.getElementById("reject").onclick=()=>decide("reject");
-// Auto-demo: /ai#demo runs parse > generate without clicks (used for demos and screenshots).
-// #demo-approve / #demo-reject also click the decision so demos can show the outcome.
-if(location.hash.startsWith("#demo")){
-  document.getElementById("parse").click();
-  const t1=setInterval(()=>{ if(!resumeId)return; clearInterval(t1);
-    document.getElementById("gen").click();
-    const t2=setInterval(()=>{ if(!draftId)return; clearInterval(t2);
-      if(location.hash==="#demo-approve")document.getElementById("approve").click();
-      if(location.hash==="#demo-reject")document.getElementById("reject").click();
-    },100);
-  },100);
-}
+// URL fragments never authorize parsing, model calls, or decisions.
 </script>
 </main></body></html>

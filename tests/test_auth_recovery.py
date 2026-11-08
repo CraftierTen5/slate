@@ -25,3 +25,18 @@ def test_auth_epoch_clears_sensitive_ui_and_discards_old_responses(page):
     assert 'function signedIn(email){\n  resetAccountState();' in s
     assert 'catch(e){if(e instanceof StaleResponse)return;' in s
     assert 'sourceGeneration++' in s
+
+
+def test_url_fragments_never_trigger_mutations_or_auto_decisions():
+    s=(ROOT/'web'/'ai.html').read_text()
+    assert 'location.hash' not in s
+    assert 'setInterval(' not in s
+    assert 'URL fragments never authorize' in s
+
+
+@pytest.mark.parametrize('page',['index.html','ai.html'])
+def test_draft_epoch_is_independent_of_source_epoch(page):
+    html=(ROOT/'web'/page).read_text()
+    assert 'draftGeneration' in html
+    assert 'epoch!==draftGeneration' in html
+    assert ('requested!==did' if page=='index.html' else 'requested!==draftId') in html

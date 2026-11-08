@@ -9,7 +9,7 @@ What it does NOT check: paraphrased or implied claims, employers or projects nam
 job titles, tone. A draft that passes is "no rule-detectable unsupported claim", not "verified true".
 """
 import re
-from .resume import find_skills
+from .resume import find_skills, qualification_lines
 
 DEGREES = ["b.tech", "btech", "m.tech", "mtech", "mba", "ph.d", "phd", "bca", "mca", "b.sc", "m.sc", "bachelor", "master"]
 
@@ -38,7 +38,8 @@ def validate(parsed: dict, resume_text: str, *texts: str) -> list:
     for num in re.findall(r"c?gpa[^0-9]{0,12}(\d+(?:\.\d+)?)", low):
         if not re.search(r"(?<![\d.])" + re.escape(num) + r"(?![\d])", src):
             problems.append(f"GPA value '{num}' is not in the resume")
+    degree_src = _norm("\n".join(qualification_lines(resume_text)))
     for d in DEGREES:
-        if re.search(r"(?<![a-z.])" + re.escape(d) + r"(?![a-z])", low) and not re.search(r"(?<![a-z.])" + re.escape(d) + r"(?![a-z])", src):
+        if re.search(r"(?<![a-z.])" + re.escape(d) + r"(?![a-z])", low) and not re.search(r"(?<![a-z.])" + re.escape(d) + r"(?![a-z])", degree_src):
             problems.append(f"degree '{d}' is not on the resume")
     return problems
