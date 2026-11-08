@@ -200,17 +200,6 @@ async function decide(what){
 }
 document.getElementById("approve").onclick=()=>decide("approve");
 document.getElementById("reject").onclick=()=>decide("reject");
-// Auto-demo: /ai#demo runs parse > generate without clicks (used for demos and screenshots).
-// #demo-approve / #demo-reject also click the decision so demos can show the outcome.
-if(location.hash.startsWith("#demo")){
-  document.getElementById("parse").click();
-  const t1=setInterval(()=>{ if(!resumeId)return; clearInterval(t1);
-    document.getElementById("gen").click();
-    const t2=setInterval(()=>{ if(!draftId)return; clearInterval(t2);
-      if(location.hash==="#demo-approve")document.getElementById("approve").click();
-      if(location.hash==="#demo-reject")document.getElementById("reject").click();
-    },100);
-  },100);
-}
+// URL fragments never authorize parsing, model calls, or decisions.
 </script>
 </main></body></html>
