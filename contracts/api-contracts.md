@@ -88,7 +88,7 @@ A tailor result is always a draft. Nothing leaves the system without the approva
 
 ### 5. Mock interview
 
-`POST /v1/interview/mock` with `{ "targetRole": "Data Analyst", "mode": "text" }` starts a session and returns `{ "sessionId": "int_101" }`.
+`POST /v1/interview/mock` with `{ "targetRole": "Data Analyst", "mode": "text", "resumeId": "res_123" }` starts a session. `resumeId` is optional; when supplied, the interview is tailored to parsed resume skills and experience. `mode` accepts `text` or `voice` (voice capture and speech playback run in the browser). The response includes `sessionId`, `firstQuestion`, and `carriedFromEarlier`.
 
 `GET /v1/interview/{sessionId}/feedback`
 
@@ -100,7 +100,7 @@ A tailor result is always a draft. Nothing leaves the system without the approva
 }
 ```
 
-Interview memory must persist: a later session can reference earlier feedback through `transcriptRef`.
+Interview memory must persist: a later session can reference earlier feedback through `transcriptRef`. Gemini answer reviews include a 1–5 score, assessment, strengths, improvements, and at most one follow-up per main question. If `GEMINI_API_KEY` is absent or Gemini fails, the interview falls back to the deterministic question bank and basic feedback. Voice mode uses browser speech APIs; text entry remains available.
 
 ### 6. Approval gate
 
