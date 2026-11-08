@@ -155,7 +155,7 @@ function refresh(){const dirty=$('dres').value!==savedRes||$('dnote').value!==sa
 $('dres').oninput=$('dnote').oninput=refresh;
 const on=id=>$(id).classList.remove("off");
 function say(id,t,bad){$(id).className="msg "+(bad?"bad":"ok");$(id).textContent=t}
-let sourceGeneration=0, sourceRequest=0;
+let sourceGeneration=0, sourceRequest=0, draftGeneration=0;
 function resetAccountState(){
   sourceRequest++;resetSourceResults();rid=null;
   $("resume").value="";$("parsed").textContent="";$("skillreview").hidden=true;
@@ -164,7 +164,8 @@ function resetAccountState(){
   ["savedmsg","reviewmsg","dmsg"].forEach(id=>$(id).textContent="");
 }
 function resetSourceResults(){
-  sourceGeneration++;did=null;sid=null;savedRes="";savedNote="";
+  $("reviewmsg").textContent="";
+  sourceGeneration++;draftGeneration++;did=null;sid=null;savedRes="";savedNote="";
   $("dres").value="";$("dnote").value="";setStatus("draft");refresh();
   $("jobs").innerHTML="";$("roadlist").innerHTML="";$("iv").innerHTML="";
   ["s2","s3","s4","s5"].forEach(id=>$(id).classList.add("off"));
@@ -228,23 +229,23 @@ $("pdffile").onchange=async()=>{const f=$("pdffile").files[0];if(!f)return;
   if(auth!==token()||generation!==sourceGeneration||requestEpoch!==sourceRequest||request!==sourceRequest)return;
   if(res.status===401){await recoverSignIn();return}
   const j=await res.json(); if(!res.ok) throw new Error(j.error?j.error.message:"Upload failed");
-  if(request!==sourceRequest)return; resetSourceResults();rid=j.resumeId; showParsed(j.parsed,"Uploaded PDF: "+f.name); await loadSavedVersions();await loadJobs();
+  if(request!==sourceRequest)return; resetSourceResults();rid=j.resumeId; $("resume").value=j.sourceText; showParsed(j.parsed,"Uploaded PDF: "+f.name); await loadSavedVersions();await loadJobs();
 }catch(e){if(e instanceof StaleResponse||auth!==token()||generation!==sourceGeneration||request!==sourceRequest)return;say("parsed",e.message,1)}};
 function setStatus(s){$("status").textContent=s;$("status").className="tag "+s}
-async function tailor(j){try{
+async function tailor(j){const epoch=++draftGeneration;try{
   const requested=rid,generation=sourceGeneration;
-  const d=await api("POST","/tailor",{resumeId:requested,jobId:j});if(generation!==sourceGeneration||requested!==rid)return; did=d.draftId;
+  const d=await api("POST","/tailor",{resumeId:requested,jobId:j});if(epoch!==draftGeneration||generation!==sourceGeneration||requested!==rid)return; did=d.draftId;
   $("dres").value=savedRes=d.tailoredResume;$("dnote").value=savedNote=d.coverNote;setStatus("draft");refresh();
   say("dmsg","Draft only. Skill gaps for this job: "+(d.skillGaps.join(", ")||"none")+". A person must review it before use.");on("s3");
-}catch(e){if(e instanceof StaleResponse)return;say("dmsg",e.message,1)}}
-$("edit").onclick=async()=>{try{
+}catch(e){if(e instanceof StaleResponse||epoch!==draftGeneration)return;say("dmsg",e.message,1)}}
+$("edit").onclick=async()=>{const epoch=++draftGeneration,requested=did;try{
   const generation=sourceGeneration;
   const r=await api("POST","/drafts/"+did+"/edit",{tailoredResume:$("dres").value,coverNote:$("dnote").value});
-  if(generation!==sourceGeneration)return;did=r.draftId;savedRes=$("dres").value;savedNote=$("dnote").value;setStatus("draft");refresh();say("dmsg","Saved as a new draft. It needs its own approval.");
-}catch(e){if(e instanceof StaleResponse)return;say("dmsg",e.message,1)}};
-$("approve").onclick=async()=>{try{const generation=sourceGeneration;const r=await api("POST","/approvals",{draftId:did,decision:"approve"});if(generation!==sourceGeneration)return;setStatus(r.status);say("dmsg","Saved draft approved in this demo. Review it yourself before using it anywhere.")}catch(e){if(e instanceof StaleResponse)return;say("dmsg",e.message,1)}};
-$("reject").onclick=async()=>{try{const generation=sourceGeneration;const r=await api("POST","/approvals",{draftId:did,decision:"reject"});if(generation!==sourceGeneration)return;setStatus(r.status);say("dmsg","Rejected. This draft cannot be used.")}catch(e){if(e instanceof StaleResponse)return;say("dmsg",e.message,1)}};
-$("export").onclick=async()=>{try{const generation=sourceGeneration;await api("GET","/drafts/"+did+"/export");if(generation!==sourceGeneration)return;say("dmsg","Export allowed by the demo gate: this saved version is approved and no rule-detectable unsupported claim was found. Not a fact check; review it yourself.")}catch(e){if(e instanceof StaleResponse)return;say("dmsg",e.message,1)}};
+  if(epoch!==draftGeneration||requested!==did||generation!==sourceGeneration)return;did=r.draftId;savedRes=$("dres").value;savedNote=$("dnote").value;setStatus("draft");refresh();say("dmsg","Saved as a new draft. It needs its own approval.");
+}catch(e){if(e instanceof StaleResponse||epoch!==draftGeneration||requested!==did)return;say("dmsg",e.message,1)}};
+$("approve").onclick=async()=>{const epoch=draftGeneration,requested=did;try{const generation=sourceGeneration;const r=await api("POST","/approvals",{draftId:did,decision:"approve"});if(epoch!==draftGeneration||requested!==did||generation!==sourceGeneration)return;setStatus(r.status);say("dmsg","Saved draft approved in this demo. Review it yourself before using it anywhere.")}catch(e){if(e instanceof StaleResponse||epoch!==draftGeneration||requested!==did)return;say("dmsg",e.message,1)}};
+$("reject").onclick=async()=>{const epoch=draftGeneration,requested=did;try{const generation=sourceGeneration;const r=await api("POST","/approvals",{draftId:did,decision:"reject"});if(epoch!==draftGeneration||requested!==did||generation!==sourceGeneration)return;setStatus(r.status);say("dmsg","Rejected. This draft cannot be used.")}catch(e){if(e instanceof StaleResponse||epoch!==draftGeneration||requested!==did)return;say("dmsg",e.message,1)}};
+$("export").onclick=async()=>{const epoch=draftGeneration,requested=did;try{const generation=sourceGeneration;await api("GET","/drafts/"+did+"/export");if(epoch!==draftGeneration||requested!==did||generation!==sourceGeneration)return;say("dmsg","Export allowed by the demo gate: this saved version is approved and no rule-detectable unsupported claim was found. Not a fact check; review it yourself.")}catch(e){if(e instanceof StaleResponse||epoch!==draftGeneration||requested!==did)return;say("dmsg",e.message,1)}};
 const resLink=x=>{const i=x.lastIndexOf(" - http");if(i<0)return esc(x);const u=x.slice(i+3);return /^https:\/\//.test(u)?`<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(x.slice(0,i))}</a>`:esc(x)};
 $("road").onclick=async()=>{try{const generation=sourceGeneration;const r=await api("POST","/roadmap",{resumeId:rid,targetRole:"Data Analyst"});
   if(generation!==sourceGeneration)return;$("roadlist").innerHTML=r.milestones.map(m=>`<li><b>${esc(m.title)}</b> · ${m.etaWeeks} wk<br><small>${esc(m.why)}</small><br><small>${m.resources.map(resLink).join(" · ")}</small></li>`).join("")}catch(e){if(e instanceof StaleResponse)return;$("roadlist").innerHTML='<li class="bad">'+esc(e.message)+"</li>"}};
