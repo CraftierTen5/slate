@@ -126,3 +126,71 @@ Rules:
 - Auth: how do web and cli identify the user to the backend? (token header is the likely answer, undecided)
 - Pagination for `/v1/jobs` once a real source exists.
 - File upload format for resumes (PDF only, or DOCX too).
+
+## Additive resume skill review (authenticated adapter)
+
+`POST /v1/resume/{resumeId}/skills/review` accepts
+`{"skills":["python","sql"],"confirm":true}`. `confirm` must be an explicit
+boolean true. At most64short skill strings are accepted. The signed-in user's
+store owns the parent ID; another user's same-looking ID never selects it.
+Response: `{"resumeId":"res_new","parsed":{...},"invalidatedDraftIds":[...]}`.
+
+This is a new immutable resume version. `parsed.skillReview` records parent and
+original IDs plus `user_reviewed_not_independently_verified` status. Original
+source text remains intact. Existing extracted `skillEvidence.source` stays
+`known_phrase`, `explicit_skill_list` or `legacy_parse`; `reviewStatus` becomes
+`user_confirmed`. Newly supplied skills use `source:user_statement` and
+`reviewStatus:user_provided_not_source_extracted`, and are included in a clearly
+labeled user-statement addendum for the new version. Reconfirming does not turn
+`user_statement` into document extraction. User authorship is not verification.
+
+Only reviewed skills drive matches/drafts for the new ID. Claim checks still
+apply; source corrections do not establish work history/degrees/durations or
+silently approve output. Approved drafts bound to the corrected parent or its
+ancestors revert to draft with content/source IDs preserved. Rejected drafts and
+unrelated resume lineages/users remain untouched. Invalid input/confirmation
+makes no changes. A new draft requires explicit version-bound approval.
+
+`parsed.sectionReview` has `education` and `experience`, each with `status`,
+`sourceLines` and `note`. `source_section_needs_review` means a supported literal
+section heading/excerpt was found, not that qualifications were verified or fully
+structured. `not_recognized` does not mean the person has no qualifications or
+experience. Previews are bounded and can miss unfamiliar layouts. Existing
+structured education/experience arrays retain their limited extraction semantics.
+
+Classic web UI consumes these additive fields and exposes review. CLI and AI-page
+review editing are not implemented; existing older consumers may ignore them.
+
+### Saved resume selection (authenticated adapter)
+
+`GET /v1/resume` returns `{totalCount,resumes:[{resumeId,name,reviewStatus,
+parentResumeId,skillCount}]}` newest first, at most100summaries. It includes no
+full source text. Older IDs remain stored and can still be opened by known ID;
+UI pagination is not implemented. `GET /v1/resume/{resumeId}` returns
+`{resumeId,parsed,sourceText,sourceTextKind}` only from the verified user's store.
+`sourceTextKind:original_uploaded_text_not_user_addendum` makes clear the text
+box shows the original upload, even for a reviewed version. `parsed` retains
+reviewed skill statements/provenance. Reads never reparse, mutate, or approve
+anything. Unknown IDs are404, unauthenticated requests401. No global index or
+cross-user ID lookup exists. Classic UI clears all source-bound derived results
+when reopening, creating or reviewing a version and ignores late job/draft
+responses for a previous source. It exposes newest100versions only.
+
+### Concurrent authenticated SQL state
+
+Any state-writing endpoint can return409`state_conflict` when another request
+changed the same user's stored document after this one loaded it. No changes
+from the conflicting snapshot are persisted. Reopen latest state and choose
+whether to retry; the server does not replay automatically. Upstream model
+work already done is not rolled back. This is document-value conflict detection,
+not a revision/event ledger. Unauthenticated fixture mode, memory stores and
+legacy single-snapshot helpers do not gain multiprocess guarantees.
+
+### PDF source text in upload response
+
+`POST /v1/resume/pdf` also returns `sourceText` and
+`sourceTextKind:original_uploaded_text_not_user_addendum`, so the classic editor
+can replace a previous typed source with the actual PDF extraction. These are
+additive fields, not an edited PDF or independently verified qualifications.
+The current draft display is separately bound to draft identity/generation:
+late decisions from a prior draft must not label a newer draft approved.
