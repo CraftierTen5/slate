@@ -20,7 +20,7 @@ from typing import Optional
 from fastapi import APIRouter, FastAPI, File, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, FileResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictBool
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from slate_core import SlateService, SlateError  # noqa: E402
@@ -35,9 +35,14 @@ STATUS.setdefault("ai_not_configured", 503)  # appended, so sibling PRs editing 
 STATUS.setdefault("unauthenticated", 401)
 STATUS.setdefault("invalid_token", 401)
 STATUS.setdefault("auth_not_configured", 503)
+STATUS.setdefault("state_conflict", 409)
 
 class ResumeIn(BaseModel):
     text: str = Field(max_length=200_000)  # plain text for now; PDF upload is an open question in the contract
+
+class SkillReviewIn(BaseModel):
+    skills: list[str] = Field(max_length=64)
+    confirm: StrictBool
 
 class TailorIn(BaseModel):
     resumeId: str
@@ -74,16 +79,33 @@ def _mount(r: APIRouter, get_svc):
         with get_svc(request) as svc: return svc.upload_resume(b.text)
 
     @r.post("/resume/pdf")
-    async def resume_pdf(request: Request, file: UploadFile = File(...)):
+    def resume_pdf(request: Request, file: UploadFile = File(...)):
         with get_svc(request) as svc:  # authenticate BEFORE touching the upload
-            data = await file.read()
+            # FastAPI runs sync endpoints in its worker pool. Never hold the
+            # blocking per-user lock while awaiting on the event loop.
+            data = file.file.read(5_000_001)
             if len(data) > 5_000_000:
                 raise SlateError("resume_unreadable", "PDF is too large (5 MB max).")
             try:
                 text = extract_pdf_text(data)
             except ParseError as e:
                 raise SlateError("resume_unreadable", str(e))
-            return svc.upload_resume(text)
+            result = svc.upload_resume(text)
+            result["sourceText"] = text
+            result["sourceTextKind"] = "original_uploaded_text_not_user_addendum"
+            return result
+
+    @r.get("/resume")
+    def list_resumes(request: Request):
+        with get_svc(request) as svc: return svc.list_resumes()
+
+    @r.get("/resume/{rid}")
+    def get_resume(request: Request, rid: str):
+        with get_svc(request) as svc: return svc.get_resume(rid)
+
+    @r.post("/resume/{rid}/skills/review")
+    def review_skills(request: Request, rid: str, b: SkillReviewIn):
+        with get_svc(request) as svc: return svc.review_resume_skills(rid, b.skills, b.confirm)
 
     @r.get("/jobs")
     def jobs(request: Request, query: str = "", location: str = "", resumeId: Optional[str] = None):
@@ -144,6 +166,13 @@ def _shell(r: APIRouter) -> FastAPI:
     app = FastAPI(title="Slate API (core adapter)")
     app.include_router(r)
 
+    @app.middleware("http")
+    async def private_api_responses(request: Request, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith("/v1/") or request.url.path == "/v1":
+            response.headers["Cache-Control"] = "no-store"
+        return response
+
     @app.exception_handler(SlateError)
     async def _slate(_: Request, e: SlateError):
         return JSONResponse(e.to_dict(), status_code=STATUS.get(e.code, 400))
@@ -183,7 +212,7 @@ def create_authenticated_app(auth, user_store, llm_client=None) -> FastAPI:
     read from the request; demo reset wipes only the caller's own data."""
     from contextlib import contextmanager
     from slate_core.ai_service import AISlateService
-    from slate_core.user_store import UserSnapshot, locked
+    from slate_core.user_store import UserSnapshot, WriteConflict, locked
 
     @contextmanager
     def get_svc(request: Request):
@@ -193,7 +222,10 @@ def create_authenticated_app(auth, user_store, llm_client=None) -> FastAPI:
                              "(or SUPABASE_URL + SUPABASE_ANON_KEY), or SLATE_DEV_AUTH=1 for local dev.")
         user = auth.authenticate(request.headers.get("authorization"))
         with locked(user.id):  # serializes a user's own concurrent requests; see user_store.locked
-            yield AISlateService(UserSnapshot(user_store, user.id), llm_client=llm_client)
+            try:
+                yield AISlateService(UserSnapshot(user_store, user.id), llm_client=llm_client)
+            except WriteConflict:
+                raise SlateError("state_conflict", "Your saved data changed in another request. Nothing from this request was saved. Reopen the latest version and try again.") from None
 
     r = APIRouter(prefix="/v1")
 
