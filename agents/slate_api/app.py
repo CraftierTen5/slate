@@ -6,13 +6,14 @@ Run:  uvicorn slate_api.app:app --app-dir agents
 """
 import os, sys
 from typing import Optional
-from fastapi import APIRouter, FastAPI, Request
+from fastapi import APIRouter, FastAPI, File, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from slate_core import SlateService, SlateError  # noqa: E402
+from slate_core.resume import ParseError, extract_pdf_text  # noqa: E402
 
 STATUS = {"resume_not_found": 404, "job_not_found": 404, "draft_not_found": 404, "session_not_found": 404,
           "resume_unreadable": 422, "invalid_decision": 422, "role_unknown": 404, "mode_unsupported": 422,
@@ -50,6 +51,15 @@ def create_app(service: Optional[SlateService] = None) -> FastAPI:
 
     @r.post("/resume")
     def resume(b: ResumeIn): return svc.upload_resume(b.text)
+
+    @r.post("/resume/pdf")
+    async def resume_pdf(file: UploadFile = File(...)):
+        data = await file.read()
+        try:
+            text = extract_pdf_text(data)
+        except ParseError as e:
+            raise SlateError("resume_unreadable", str(e))
+        return svc.upload_resume(text)
 
     @r.get("/jobs")
     def jobs(query: str = "", location: str = "", resumeId: Optional[str] = None):

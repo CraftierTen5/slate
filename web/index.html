@@ -16,7 +16,7 @@ button.sec{background:#fff;color:var(--navy);border:1px solid var(--navy)}
 .chip{display:inline-block;background:#eef2fb;color:var(--blue);border-radius:99px;padding:2px 10px;margin:2px 4px 2px 0;font-size:14px}
 .job{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px 12px;border-top:1px solid var(--line);padding:10px 0}.job>div:first-child{flex:1 1 220px;min-width:0}.job>div:last-child{display:flex;align-items:center;gap:10px;margin-left:auto}.job button{margin:0}
 .job:first-of-type{border-top:0}.job small{color:var(--mut)}.score{font-weight:600;color:var(--blue)}
-.msg{margin-top:8px;font-size:14px}.bad{color:var(--bad)}.ok{color:var(--ok)}
+.msg{margin-top:8px;font-size:14px}.upl{font-size:14px;color:var(--mut)}input[type=file]{max-width:220px;font-size:13px}.bad{color:var(--bad)}.ok{color:var(--ok)}
 .tag{display:inline-block;border:1px solid var(--mut);color:var(--mut);border-radius:6px;padding:0 8px;font-size:13px}
 .tag.approved{border-color:var(--navy);color:#fff;background:var(--navy)}.tag.rejected{border-color:var(--bad);color:var(--bad)}
 li{margin:4px 0}.q{background:#f5f7fb;border-radius:8px;padding:8px 10px;margin-bottom:8px}
@@ -29,7 +29,8 @@ li{margin:4px 0}.q{background:#f5f7fb;border-radius:8px;padding:8px 10px;margin-
 B.Tech Computer Science, IIITM Gwalior, 2027
 Intern at ExampleCo (3 months)
 Skills: Python, Git, Excel, communication</textarea>
-<button id="parse">Parse resume</button><div id="parsed" class="msg"></div></section>
+<div><button id="parse">Parse resume text</button><span class="upl">or upload a PDF: <input type="file" id="pdffile" accept="application/pdf,.pdf"></span></div>
+<div id="parsed" class="msg"></div></section>
 
 <section id="s2" class="off"><h2><b>2</b>Job matches</h2>
 <p class="note">Demo score = share of a listing's skills found on the resume, over 5 sample listings. The 75% threshold from the deck is not implemented, so nothing here is claimed as a good match.</p>
@@ -61,13 +62,25 @@ function refresh(){const dirty=$('dres').value!==savedRes||$('dnote').value!==sa
 $('dres').oninput=$('dnote').oninput=refresh;
 const on=id=>$(id).classList.remove("off");
 function say(id,t,bad){$(id).className="msg "+(bad?"bad":"ok");$(id).textContent=t}
-$("parse").onclick=async()=>{try{
-  const r=await api("POST","/resume",{text:$("resume").value}); rid=r.resumeId;
-  $("parsed").className="msg";$("parsed").innerHTML="<b>"+esc(r.parsed.name)+"</b><br>"+r.parsed.skills.map(s=>'<span class="chip">'+esc(s)+"</span>").join("");
+function showParsed(p,label){
+  $("parsed").className="msg";
+  $("parsed").innerHTML=(label?esc(label)+"<br>":"")+"<b>"+esc(p.name)+"</b><br>"+p.skills.map(s=>'<span class="chip">'+esc(s)+"</span>").join("");
+}
+async function loadJobs(){
   const j=await api("GET","/jobs?resumeId="+rid);
   $("jobs").innerHTML=j.jobs.map(x=>`<div class="job"><div><b>${esc(x.title)}</b><br><small>${esc(x.company)} · ${esc(x.location)} · apply by ${esc(x.deadline)}</small></div><div><span class="score">${Math.round(x.matchScore*100)}%</span> <button data-j="${x.jobId}">Tailor</button></div></div>`).join("");
   document.querySelectorAll("[data-j]").forEach(b=>b.onclick=()=>tailor(b.dataset.j));
   on("s2");on("s4");on("s5");
+}
+$("parse").onclick=async()=>{try{
+  const r=await api("POST","/resume",{text:$("resume").value}); rid=r.resumeId;
+  showParsed(r.parsed); await loadJobs();
+}catch(e){say("parsed",e.message,1)}};
+$("pdffile").onchange=async()=>{const f=$("pdffile").files[0];if(!f)return;try{
+  const fd=new FormData();fd.append("file",f);
+  const res=await fetch("/v1/resume/pdf",{method:"POST",body:fd});
+  const j=await res.json(); if(!res.ok) throw new Error(j.error?j.error.message:"Upload failed");
+  rid=j.resumeId; showParsed(j.parsed,"Uploaded PDF: "+f.name); await loadJobs();
 }catch(e){say("parsed",e.message,1)}};
 function setStatus(s){$("status").textContent=s;$("status").className="tag "+s}
 async function tailor(j){try{
