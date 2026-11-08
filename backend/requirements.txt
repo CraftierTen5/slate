@@ -47,3 +47,5 @@ watchfiles==1.3.0
 websockets==17.4
 xxhash==4.0.2
 zstandard==0.25.0
+
+google-genai>=2.0.0
