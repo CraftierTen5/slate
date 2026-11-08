@@ -28,6 +28,10 @@ pre{white-space:pre-wrap;background:#f5f7fb;border-radius:8px;padding:10px 12px;
 
 <div class="banner"><b>Human review is required.</b> The LLM only sees numbered blocks from the uploaded resume and the job, and every draft line must cite its sources like <span class="cite">[S2]</span>. The server re-checks this mechanically at approval and export: uncited lines, unknown citations, invented numbers or names, and lines whose wording leaves the cited sources all block approval. It is still not a fact check - a cited line can still twist a source's meaning, and qualifier inflation ("advanced Excel") can slip through. Review by eye.</div>
 
+<section id="loginbox"><h2>Sign in</h2>
+<div id="loginctl">Checking sign-in mode...</div>
+<div id="loginmsg" class="msg"></div></section>
+
 <section id="s1"><h2><b>1</b>Resume text</h2>
 <textarea id="resume">Asha Verma
 B.Tech Computer Science, IIITM Gwalior, 2027
@@ -64,12 +68,64 @@ function mdRender(t){
     return h?"<div>"+h+"</div>":"";
   }).join("");
 }
+function token(){return sessionStorage.getItem("slate_token")||""}
 async function api(path, method, body){
-  const r=await fetch("/v1"+path,{method,headers:{"content-type":"application/json"},body:body?JSON.stringify(body):undefined});
+  const h={"content-type":"application/json"};
+  if(token()) h["authorization"]="Bearer "+token();
+  const r=await fetch("/v1"+path,{method,headers:h,body:body?JSON.stringify(body):undefined});
   const j=await r.json().catch(()=>({}));
+  if(r.status===401){sessionStorage.removeItem("slate_token");showLogin("Sign-in expired or missing - please sign in again.")}
   if(!r.ok){throw new Error((j.error&&j.error.message)||r.statusText)}
   return j;
 }
+function showLogin(note){
+  document.getElementById("loginbox").style.display="";
+  if(note) document.getElementById("loginmsg").innerHTML='<span class="bad">'+note+"</span>";
+}
+function signedIn(email){
+  document.getElementById("loginctl").innerHTML="";
+  document.getElementById("loginmsg").innerHTML='<span class="ok">Signed in as '+String(email||"user").replace(/[<>&]/g,"")+'</span> <button class="sec" id="out">Sign out</button>';
+  document.getElementById("out").onclick=()=>{sessionStorage.removeItem("slate_token");location.reload()};
+}
+async function initAuth(){
+  let cfg={mode:"unconfigured"};
+  try{cfg=await (await fetch("/v1/config")).json()}catch(e){}
+  const ctl=document.getElementById("loginctl");
+  if(token()){signedIn();return}
+  if(cfg.mode==="dev"){
+    ctl.innerHTML='<input id="devmail" placeholder="you@example.com" style="font:inherit;padding:8px;border:1px solid var(--line);border-radius:8px"> <button id="devgo">Sign in (local dev)</button>';
+    document.getElementById("devgo").onclick=()=>{
+      const m=document.getElementById("devmail").value.trim();
+      if(!m) return;
+      sessionStorage.setItem("slate_token","dev:"+m); signedIn(m);
+    };
+  }else if(cfg.mode==="google"){
+    ctl.innerHTML="<div id=\"gbtn\"></div>";
+    const s=document.createElement("script");
+    s.src="https://accounts.google.com/gsi/client"; s.async=true;
+    s.onload=()=>{
+      google.accounts.id.initialize({client_id:cfg.googleClientId, callback:(resp)=>{
+        sessionStorage.setItem("slate_token",resp.credential); signedIn();
+      }});
+      google.accounts.id.renderButton(document.getElementById("gbtn"),{theme:"outline",size:"large"});
+    };
+    document.head.appendChild(s);
+  }else if(cfg.mode==="supabase"){
+    ctl.innerHTML='<button id="sbgo">Sign in with Google</button>';
+    const s=document.createElement("script");
+    s.src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"; s.async=true;
+    s.onload=async()=>{
+      const sb=supabase.createClient(cfg.supabaseUrl,cfg.supabaseAnonKey);
+      const sess=await sb.auth.getSession();
+      if(sess.data.session){sessionStorage.setItem("slate_token",sess.data.session.access_token);signedIn(sess.data.session.user.email);return}
+      document.getElementById("sbgo").onclick=()=>sb.auth.signInWithOAuth({provider:"google"});
+    };
+    document.head.appendChild(s);
+  }else{
+    ctl.innerHTML='<span class="bad">Sign-in is not configured on this server. Start it with GOOGLE_CLIENT_ID, or SLATE_DEV_AUTH=1 for local dev.</span>';
+  }
+}
+initAuth();
 document.getElementById("parse").onclick=async()=>{
   const msg=document.getElementById("parsed");
   try{
