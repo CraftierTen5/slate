@@ -24,7 +24,7 @@ def test_full_demo_flow(c):
     assert c.post("/v1/approvals", json={"draftId": d["draftId"], "decision": "approve"}).json()["status"] == "approved"
     assert "coverNote" in c.get(f"/v1/drafts/{d['draftId']}/export").json()
     assert c.post("/v1/roadmap", json={"resumeId": rid, "targetRole": "Data Analyst"}).json()["milestones"]
-    sid = c.post("/v1/interview/mock", json={"targetRole": "Data Analyst"}).json()["sessionId"]
+    sid = c.post("/v1/interview/mock", json={"targetRole": "Data Analyst", "mode": "voice", "resumeId": rid}).json()["sessionId"]
     c.post(f"/v1/interview/{sid}/answer", json={"text": "short"})
     fb = c.get(f"/v1/interview/{sid}/feedback").json()
     assert fb["transcriptRef"] == sid
