@@ -114,15 +114,21 @@ class GroqLLM(LLMClient):
             raise LLMError("LLM response had no text.")
 
 
-def llm_tailored_draft(parsed: dict, job: dict, client: LLMClient) -> dict:
+def llm_tailored_draft(parsed: dict, job: dict, client: LLMClient,
+                       resume_text: str = "") -> dict:
     """LLM-generated tailored draft with the claim gate kept.
 
-    Returns the build_draft shape plus flaggedClaims and requiresApproval.
-    The gate is a heuristic over free text: it checks which of the job's
-    skills the LLM text mentions and flags any the parsed resume does not
-    back. It is weaker than the structured claim check on edits, so a
-    human approves every LLM draft before it is shown as final.
+    Returns the build_draft shape plus flaggedClaims, violations and
+    requiresApproval (always True: a human approves every LLM draft).
+
+    Gate coverage (rule-based, fail-closed - from claims.validate):
+    skills named in the draft, experience durations beyond the resume total,
+    percentages and GPA values not in the original text, and degrees the
+    resume does not list. What it still CANNOT catch: paraphrased or implied
+    claims, employers/projects/job titles invented in free text, tone.
+    A pass means "no rule-detectable unsupported claim", never "true".
     """
+    from .claims import validate
     from .tailor import check_claims
     text = client.generate(build_tailor_prompt(parsed, job))
     resume, _, note = text.partition("COVER NOTE")
@@ -131,12 +137,14 @@ def llm_tailored_draft(parsed: dict, job: dict, client: LLMClient) -> dict:
     low = text.lower()
     claims = [s for s in job["skills"] if s.lower() in low]
     flagged = check_claims(parsed, claims)
+    violations = validate(parsed, resume_text, resume, note) if resume_text else []
     return {
         "tailoredResume": resume,
         "coverNote": note,
         "claims": claims,
         "gaps": [s for s in job["skills"] if s not in claims],
         "flaggedClaims": flagged,
+        "violations": violations,
         "requiresApproval": True,
     }
 
