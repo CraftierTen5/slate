@@ -126,3 +126,37 @@ Rules:
 - Auth: how do web and cli identify the user to the backend? (token header is the likely answer, undecided)
 - Pagination for `/v1/jobs` once a real source exists.
 - File upload format for resumes (PDF only, or DOCX too).
+
+## Additive resume skill review (authenticated adapter)
+
+`POST /v1/resume/{resumeId}/skills/review` accepts
+`{"skills":["python","sql"],"confirm":true}`. `confirm` must be an explicit
+boolean true. At most64short skill strings are accepted. The signed-in user's
+store owns the parent ID; another user's same-looking ID never selects it.
+Response: `{"resumeId":"res_new","parsed":{...},"invalidatedDraftIds":[...]}`.
+
+This is a new immutable resume version. `parsed.skillReview` records parent and
+original IDs plus `user_reviewed_not_independently_verified` status. Original
+source text remains intact. Existing extracted `skillEvidence.source` stays
+`known_phrase`, `explicit_skill_list` or `legacy_parse`; `reviewStatus` becomes
+`user_confirmed`. Newly supplied skills use `source:user_statement` and
+`reviewStatus:user_provided_not_source_extracted`, and are included in a clearly
+labeled user-statement addendum for the new version. Reconfirming does not turn
+`user_statement` into document extraction. User authorship is not verification.
+
+Only reviewed skills drive matches/drafts for the new ID. Claim checks still
+apply; source corrections do not establish work history/degrees/durations or
+silently approve output. Approved drafts bound to the corrected parent or its
+ancestors revert to draft with content/source IDs preserved. Rejected drafts and
+unrelated resume lineages/users remain untouched. Invalid input/confirmation
+makes no changes. A new draft requires explicit version-bound approval.
+
+`parsed.sectionReview` has `education` and `experience`, each with `status`,
+`sourceLines` and `note`. `source_section_needs_review` means a supported literal
+section heading/excerpt was found, not that qualifications were verified or fully
+structured. `not_recognized` does not mean the person has no qualifications or
+experience. Previews are bounded and can miss unfamiliar layouts. Existing
+structured education/experience arrays retain their limited extraction semantics.
+
+Classic web UI consumes these additive fields and exposes review. CLI and AI-page
+review editing are not implemented; existing older consumers may ignore them.
