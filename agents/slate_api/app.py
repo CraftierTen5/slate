@@ -85,15 +85,6 @@ def _mount(r: APIRouter, get_svc):
                 raise SlateError("resume_unreadable", str(e))
             return svc.upload_resume(text)
 
-    @r.post("/resume/pdf")
-    async def resume_pdf(file: UploadFile = File(...)):
-        data = await file.read()
-        try:
-            text = extract_pdf_text(data)
-        except ParseError as e:
-            raise SlateError("resume_unreadable", str(e))
-        with get_svc(request) as svc: return svc.upload_resume(text)
-
     @r.get("/jobs")
     def jobs(request: Request, query: str = "", location: str = "", resumeId: Optional[str] = None):
         with get_svc(request) as svc: return svc.jobs(query, location, resumeId)
