@@ -55,7 +55,15 @@ Skills: Python, Git, Excel, communication</textarea>
 <div id="decision" class="msg"></div></section>
 
 <script>
-let resumeId=null, draftId=null;
+let resumeId=null, draftId=null, sourceGeneration=0, sourceRequest=0;
+class StaleResponse extends Error {}
+function resetAccountState(){
+  sourceRequest++;sourceGeneration++;resumeId=null;draftId=null;
+  ["resume","parsed","job","genmsg","dres","dnote","flags","decision"].forEach(id=>{const e=document.getElementById(id);if("value" in e)e.value="";e.textContent=""});
+  ["s2","s3"].forEach(id=>document.getElementById(id).classList.add("off"));
+  document.getElementById("status").textContent="draft";
+  document.getElementById("status").className="tag draft";
+}
 // Small safe renderer: escape first, then map light Markdown to HTML so model
 // output never shows raw ** or ## and can never inject markup.
 function mdRender(t){
@@ -70,11 +78,15 @@ function mdRender(t){
 }
 function token(){return sessionStorage.getItem("slate_token")||""}
 async function api(path, method, body){
+  const auth=token(),generation=sourceGeneration,requestEpoch=sourceRequest;
   const h={"content-type":"application/json"};
-  if(token()) h["authorization"]="Bearer "+token();
-  const r=await fetch("/v1"+path,{method,headers:h,body:body?JSON.stringify(body):undefined});
+  if(auth) h["authorization"]="Bearer "+auth;
+  let r;
+  try{r=await fetch("/v1"+path,{method,headers:h,body:body?JSON.stringify(body):undefined})}
+  catch(e){if(auth!==token()||generation!==sourceGeneration||requestEpoch!==sourceRequest)throw new StaleResponse();throw e}
   const j=await r.json().catch(()=>({}));
-  if(r.status===401){await recoverSignIn()}
+  if(auth!==token()||generation!==sourceGeneration||requestEpoch!==sourceRequest)throw new StaleResponse();
+  if(r.status===401){await recoverSignIn();throw new StaleResponse()}
   if(!r.ok){throw new Error((j.error&&j.error.message)||r.statusText)}
   return j;
 }
@@ -85,6 +97,7 @@ function showLogin(note){
 let authRecovery=null;
 async function recoverSignIn(){
   sessionStorage.removeItem("slate_token");
+  resetAccountState();
   showLogin("Sign-in expired or missing - please sign in again. Your saved data is unchanged.");
   // Rebuild the actual control, not just a message. Never retry a mutation
   // automatically: the user resumes the action after authenticating.
@@ -92,13 +105,14 @@ async function recoverSignIn(){
   await authRecovery;
 }
 function signedIn(email){
+  resetAccountState();
   document.getElementById("loginctl").innerHTML="";
   document.getElementById("loginmsg").innerHTML='<span class="ok">Signed in as '+String(email||"user").replace(/[<>&]/g,"")+'</span> <button class="sec" id="out">Sign out</button>';
   document.getElementById("out").onclick=()=>{sessionStorage.removeItem("slate_token");if(window.google?.accounts?.id) google.accounts.id.disableAutoSelect();location.reload()};
 }
 async function initAuth(){
   let cfg={mode:"unconfigured"};
-  try{cfg=await (await fetch("/v1/config")).json()}catch(e){}
+  try{cfg=await (await fetch("/v1/config")).json()}catch(e){if(e instanceof StaleResponse)return;}
   const ctl=document.getElementById("loginctl");
   if(token()){signedIn();return}
   if(cfg.mode==="dev"){
@@ -144,16 +158,19 @@ async function initAuth(){
 }
 initAuth();
 document.getElementById("parse").onclick=async()=>{
+  sourceRequest++;
   const msg=document.getElementById("parsed");
   try{
     const r=await api("/resume","POST",{text:document.getElementById("resume").value});
-    resumeId=r.resumeId;
+    sourceGeneration++;draftId=null;resumeId=r.resumeId;
+    document.getElementById("s3").classList.add("off");
+    ["dres","dnote","flags","decision","genmsg"].forEach(id=>document.getElementById(id).textContent="");
     msg.textContent="Detected skill phrases: "+(r.parsed.skills.join(", ")||"none found; this does not mean you have no skills")+". "+(r.parsed.parseWarnings||[]).join(" ")+" Not counted without review: "+(r.parsed.uncertainSkills||[]).map(e=>e.skill).join(", ")+". Job choices below are five analyst/tech fixtures, not inferred career targets; retail/customer-service roles are not covered.";
     const j=await api("/jobs","GET");
     const sel=document.getElementById("job");
     sel.innerHTML=j.jobs.map(x=>`<option value="${x.jobId}">${x.title} at ${x.company}</option>`).join("");
     document.getElementById("s2").classList.remove("off");
-  }catch(e){msg.innerHTML='<span class="bad">'+e.message+"</span>"}
+  }catch(e){if(e instanceof StaleResponse)return;msg.innerHTML='<span class="bad">'+e.message+"</span>"}
 };
 document.getElementById("gen").onclick=async()=>{
   const msg=document.getElementById("genmsg");
@@ -170,7 +187,7 @@ document.getElementById("gen").onclick=async()=>{
       ?'<div class="warn"><b>Claim rule warnings - check these before approving:</b><ul>'+f.map(x=>"<li>"+x+"</li>").join("")+"</ul></div>"
       :'<div class="msg ok">No rule-detectable unsupported claim. That is not a fact check - still review by eye.</div>';
     document.getElementById("s3").classList.remove("off");
-  }catch(e){msg.innerHTML='<span class="bad">'+e.message+"</span>"}
+  }catch(e){if(e instanceof StaleResponse)return;msg.innerHTML='<span class="bad">'+e.message+"</span>"}
 };
 async function decide(what){
   const el=document.getElementById("decision");
@@ -179,7 +196,7 @@ async function decide(what){
     document.getElementById("status").textContent=r.status;
     document.getElementById("status").className="tag "+r.status;
     el.innerHTML='Decision stored: '+r.status;
-  }catch(e){el.innerHTML='<span class="bad">'+e.message+"</span>"}
+  }catch(e){if(e instanceof StaleResponse)return;el.innerHTML='<span class="bad">'+e.message+"</span>"}
 }
 document.getElementById("approve").onclick=()=>decide("approve");
 document.getElementById("reject").onclick=()=>decide("reject");
