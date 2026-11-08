@@ -160,3 +160,18 @@ structured education/experience arrays retain their limited extraction semantics
 
 Classic web UI consumes these additive fields and exposes review. CLI and AI-page
 review editing are not implemented; existing older consumers may ignore them.
+
+### Saved resume selection (authenticated adapter)
+
+`GET /v1/resume` returns `{totalCount,resumes:[{resumeId,name,reviewStatus,
+parentResumeId,skillCount}]}` newest first, at most100summaries. It includes no
+full source text. Older IDs remain stored and can still be opened by known ID;
+UI pagination is not implemented. `GET /v1/resume/{resumeId}` returns
+`{resumeId,parsed,sourceText,sourceTextKind}` only from the verified user's store.
+`sourceTextKind:original_uploaded_text_not_user_addendum` makes clear the text
+box shows the original upload, even for a reviewed version. `parsed` retains
+reviewed skill statements/provenance. Reads never reparse, mutate, or approve
+anything. Unknown IDs are404, unauthenticated requests401. No global index or
+cross-user ID lookup exists. Classic UI clears all source-bound derived results
+when reopening, creating or reviewing a version and ignores late job/draft
+responses for a previous source. It exposes newest100versions only.
