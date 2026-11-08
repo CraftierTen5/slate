@@ -29,6 +29,17 @@ class SlateService:
                 self.approvals._drafts, self.approvals._n = st["drafts"], st["draftN"]
                 self.interviews._sessions, self.interviews._n = st["sessions"], st["sessionN"]
 
+    def reset_demo(self, confirm: str) -> dict:
+        """Demo helper, gated by the API layer: wipe resumes and drafts so the demo can restart.
+
+        Interview sessions belong to the interview feature and are intentionally kept."""
+        if confirm != "reset":
+            raise SlateError("reset_not_confirmed", 'Send {"confirm": "reset"} to wipe the demo data.')
+        self._resumes, self._texts = {}, {}
+        self.approvals._drafts, self.approvals._n = {}, 0
+        self._persist()
+        return {"reset": True}
+
     def _persist(self):
         if self._store is not None:
             self._store.save({"resumes": self._resumes, "texts": self._texts,

@@ -31,7 +31,13 @@ class ApprovalStore:
         if d is None:
             raise KeyError("draft_not_found")
         content = {**d["content"], **content_updates}
-        return self.create_draft(d["resumeId"], d["jobId"], content)
+        new_id = self.create_draft(d["resumeId"], d["jobId"], content)
+        # A successful edit invalidates the parent's old approval too. Keep its
+        # content/source binding intact; a new explicit decision can approve
+        # that exact historical version again. Rejected parents stay rejected.
+        if d["status"] == "approved":
+            d["status"] = "draft"
+        return new_id
 
     def export(self, draft_id) -> dict:
         d = self._drafts.get(draft_id)
