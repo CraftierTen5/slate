@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from slate_core import SlateService, SlateError  # noqa: E402
 
 STATUS = {"resume_not_found": 404, "job_not_found": 404, "draft_not_found": 404, "session_not_found": 404,
-          "resume_unreadable": 422, "invalid_decision": 422, "role_unknown": 404, "mode_unsupported": 422,
+          "resume_unreadable": 422, "invalid_decision": 422, "role_unknown": 404, "mode_unsupported": 422, "interview_invalid_state": 409,
           "draft_not_approved": 403, "draft_rejected": 409, "unsupported_claim": 422}
 
 class ResumeIn(BaseModel):
@@ -69,7 +69,7 @@ def create_app(service: Optional[SlateService] = None) -> FastAPI:
     def roadmap(b: RoadmapIn): return svc.roadmap(b.resumeId, b.targetRole)
 
     @r.post("/interview/mock")
-    def mock(b: MockIn): return svc.start_interview(b.targetRole, b.mode)
+    def mock(b: MockIn): return svc.start_interview(b.targetRole, b.mode, b.resumeId)
 
     @r.post("/interview/{sid}/answer")
     def answer(sid: str, b: AnswerIn): return svc.answer_interview(sid, b.text)
