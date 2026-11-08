@@ -36,6 +36,7 @@ class RoadmapIn(BaseModel):
 class MockIn(BaseModel):
     targetRole: str
     mode: str = "text"
+    resumeId: Optional[str] = None
 
 class AnswerIn(BaseModel):
     text: str
