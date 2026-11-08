@@ -34,7 +34,14 @@ B.Tech Computer Science, IIITM Gwalior, 2027
 Intern at ExampleCo (3 months)
 Skills: Python, Git, Excel, communication</textarea>
 <div><button id="parse">Parse resume text</button><span class="upl">or upload a PDF: <input type="file" id="pdffile" accept="application/pdf,.pdf"></span></div>
-<div id="parsed" class="msg"></div></section>
+<div id="parsed" class="msg"></div>
+<div id="skillreview" hidden>
+<h3>Review your skill statements</h3>
+<p class="note">Keep only skills you claim. Add missing skills one per line. New entries are saved as your statements, not as extracted or verified document evidence. Saving creates a new resume version and clears old approvals for this source.</p>
+<textarea id="reviewskills" aria-label="Reviewed skill statements, one per line"></textarea>
+<label><input type="checkbox" id="confirmreview"> I confirm these are my skill statements, not verified qualifications.</label>
+<div><button id="savereview">Save reviewed skills as new version</button></div>
+<div id="reviewmsg" class="msg"></div></div></section>
 
 <section id="s2" class="off"><h2><b>2</b>Sample job comparisons</h2>
 <p class="note">Demo score = share of a listing's skills found on the resume, over 5 sample listings. The 75% threshold from the deck is not implemented, so nothing here is claimed as a good match.</p>
@@ -137,7 +144,13 @@ const on=id=>$(id).classList.remove("off");
 function say(id,t,bad){$(id).className="msg "+(bad?"bad":"ok");$(id).textContent=t}
 function showParsed(p,label){
   $("parsed").className="msg";
-  $("parsed").innerHTML=(label?esc(label)+"<br>":"")+"<b>"+esc(p.name)+"</b><br>"+p.skills.map(s=>'<span class="chip">'+esc(s)+"</span>").join("")+(p.skills.length?"":"<p>No supported skill phrases detected. This does not mean you have no skills.</p>")+'<p class="note">'+esc((p.parseWarnings||[]).join(" "))+'</p>'+(p.skillEvidence?.length?'<details><summary>Why these skills were detected</summary><ul>'+p.skillEvidence.map(e=>'<li>'+esc(e.skill)+': &quot;'+esc(e.matchedText)+'&quot;</li>').join("")+'</ul></details>':"")+(p.uncertainSkills?.length?'<p class="note">Not counted without review: '+p.uncertainSkills.map(e=>esc(e.skill)+" ("+esc(e.reason)+")").join("; ")+"</p>":"");
+  $("parsed").innerHTML=(label?esc(label)+"<br>":"")+"<b>"+esc(p.name)+"</b><br>"+p.skills.map(s=>'<span class="chip">'+esc(s)+"</span>").join("")+(p.skills.length?"":"<p>No supported skill phrases detected. This does not mean you have no skills.</p>")+'<p class="note">'+esc((p.parseWarnings||[]).join(" "))+'</p>'+(p.skillEvidence?.length?'<details><summary>Skill source and review</summary><ul>'+p.skillEvidence.map(e=>'<li>'+esc(e.skill)+': &quot;'+esc(e.matchedText)+'&quot; ('+esc(({known_phrase:'source phrase',explicit_skill_list:'source skills list',legacy_parse:'legacy parse',user_statement:'your added statement, not extracted'})[e.source]||'source not recorded')+(e.reviewStatus==='user_confirmed'?', confirmed by you':'')+')</li>').join("")+'</ul></details>':"")+(p.uncertainSkills?.length?'<p class="note">Not counted without review: '+p.uncertainSkills.map(e=>esc(e.skill)+" ("+esc(e.reason)+")").join("; ")+"</p>":"");
+  $("skillreview").hidden=false;
+  $("reviewskills").value=p.skills.join("\n");
+  $("confirmreview").checked=false;
+  const review=p.sectionReview||{};
+  $("parsed").insertAdjacentHTML("beforeend",Object.entries(review).map(([key,value])=>'<details><summary>'+esc(key)+': '+esc(value.status.replaceAll("_"," "))+'</summary><p>'+esc(value.note)+'</p><ul>'+value.sourceLines.map(line=>'<li>'+esc(line)+'</li>').join("")+'</ul></details>').join(""));
+
 }
 async function loadJobs(){
   const j=await api("GET","/jobs?resumeId="+rid);
@@ -145,6 +158,15 @@ async function loadJobs(){
   document.querySelectorAll("[data-j]").forEach(b=>b.onclick=()=>tailor(b.dataset.j));
   on("s2");on("s4");on("s5");
 }
+$("savereview").onclick=async()=>{try{
+  if(!$("confirmreview").checked) throw new Error("Confirm your skill statements before saving.");
+  const skills=$("reviewskills").value.split("\n").map(x=>x.trim()).filter(Boolean);
+  const r=await api("POST","/resume/"+rid+"/skills/review",{skills,confirm:true});
+  rid=r.resumeId;did=null;savedRes="";savedNote="";$("dres").value="";$("dnote").value="";$("s3").classList.add("off");setStatus("draft");say("dmsg","Choose a job to create a new unapproved draft for the reviewed resume version.");refresh();
+  showParsed(r.parsed,"Saved user-reviewed version: "+r.resumeId);
+  say("reviewmsg","Saved for this signed-in user. Prior source preserved. "+r.invalidatedDraftIds.length+" previous approval(s) cleared. Choose a job to make a fresh unapproved draft.");
+  await loadJobs();
+}catch(e){say("reviewmsg",e.message,1)}};
 $("parse").onclick=async()=>{try{
   const r=await api("POST","/resume",{text:$("resume").value}); rid=r.resumeId;
   showParsed(r.parsed); await loadJobs();
