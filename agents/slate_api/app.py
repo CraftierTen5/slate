@@ -20,7 +20,7 @@ from typing import Optional
 from fastapi import APIRouter, FastAPI, File, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, FileResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictBool
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from slate_core import SlateService, SlateError  # noqa: E402
@@ -38,6 +38,10 @@ STATUS.setdefault("auth_not_configured", 503)
 
 class ResumeIn(BaseModel):
     text: str = Field(max_length=200_000)  # plain text for now; PDF upload is an open question in the contract
+
+class SkillReviewIn(BaseModel):
+    skills: list[str] = Field(max_length=64)
+    confirm: StrictBool
 
 class TailorIn(BaseModel):
     resumeId: str
@@ -84,6 +88,10 @@ def _mount(r: APIRouter, get_svc):
             except ParseError as e:
                 raise SlateError("resume_unreadable", str(e))
             return svc.upload_resume(text)
+
+    @r.post("/resume/{rid}/skills/review")
+    def review_skills(request: Request, rid: str, b: SkillReviewIn):
+        with get_svc(request) as svc: return svc.review_resume_skills(rid, b.skills, b.confirm)
 
     @r.get("/jobs")
     def jobs(request: Request, query: str = "", location: str = "", resumeId: Optional[str] = None):
