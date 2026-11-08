@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field, StrictBool
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from slate_core import SlateService, SlateError  # noqa: E402
-from slate_core.resume import ParseError, extract_pdf_text  # noqa: E402
+from slate_core.resume import ParseError, extract_pdf_text, MAX_PDF_BYTES  # noqa: E402
 from slate_core.auth import AuthError  # noqa: E402
 
 STATUS = {"resume_not_found": 404, "job_not_found": 404, "draft_not_found": 404, "session_not_found": 404,
@@ -83,8 +83,8 @@ def _mount(r: APIRouter, get_svc):
         with get_svc(request) as svc:  # authenticate BEFORE touching the upload
             # FastAPI runs sync endpoints in its worker pool. Never hold the
             # blocking per-user lock while awaiting on the event loop.
-            data = file.file.read(5_000_001)
-            if len(data) > 5_000_000:
+            data = file.file.read(MAX_PDF_BYTES + 1)
+            if len(data) > MAX_PDF_BYTES:
                 raise SlateError("resume_unreadable", "PDF is too large (5 MB max).")
             try:
                 text = extract_pdf_text(data)
@@ -164,6 +164,8 @@ def _mount(r: APIRouter, get_svc):
 
 def _shell(r: APIRouter) -> FastAPI:
     app = FastAPI(title="Slate API (core adapter)")
+    from .request_limits import RequestBodyLimit
+    app.add_middleware(RequestBodyLimit)
     app.include_router(r)
 
     @app.middleware("http")
