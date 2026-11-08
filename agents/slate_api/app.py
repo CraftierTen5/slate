@@ -89,6 +89,14 @@ def _mount(r: APIRouter, get_svc):
                 raise SlateError("resume_unreadable", str(e))
             return svc.upload_resume(text)
 
+    @r.get("/resume")
+    def list_resumes(request: Request):
+        with get_svc(request) as svc: return svc.list_resumes()
+
+    @r.get("/resume/{rid}")
+    def get_resume(request: Request, rid: str):
+        with get_svc(request) as svc: return svc.get_resume(rid)
+
     @r.post("/resume/{rid}/skills/review")
     def review_skills(request: Request, rid: str, b: SkillReviewIn):
         with get_svc(request) as svc: return svc.review_resume_skills(rid, b.skills, b.confirm)
@@ -151,6 +159,13 @@ def _mount(r: APIRouter, get_svc):
 def _shell(r: APIRouter) -> FastAPI:
     app = FastAPI(title="Slate API (core adapter)")
     app.include_router(r)
+
+    @app.middleware("http")
+    async def private_api_responses(request: Request, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith("/v1/") or request.url.path == "/v1":
+            response.headers["Cache-Control"] = "no-store"
+        return response
 
     @app.exception_handler(SlateError)
     async def _slate(_: Request, e: SlateError):
