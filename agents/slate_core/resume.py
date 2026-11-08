@@ -1,6 +1,7 @@
 import io
 import re
 from .skills import skill_evidence, resume_skill_evidence
+from .resume_review import section_previews
 
 MAX_PDF_BYTES = 5 * 1024 * 1024
 
@@ -20,7 +21,7 @@ def parse_resume(text: str) -> dict:
     skills = [item["skill"] for item in evidence]
     education, experience = [], []
     for l in lines:
-        m = re.search(r"(b\.?tech|m\.?tech|bca|mca|b\.?sc|m\.?sc|bachelor|master)[^,\n]*", l, re.I)
+        m = re.search(r"(?<![a-z])(b\.?tech|m\.?tech|bca|mca|b\.?sc|m\.?sc|bachelor|master)(?![a-z])[^,\n]*", l, re.I)
         if m:
             y = re.search(r"(20\d\d)", l)
             education.append({"degree": m.group(1).upper().replace("..", "."), "institute": _after(l, ","),
@@ -31,6 +32,7 @@ def parse_resume(text: str) -> dict:
                                "months": int(m.group(3)) if m.group(3) else None})
     return {"name": name, "skills": skills, "education": education, "experience": experience,
             "skillEvidence": evidence, "uncertainSkills": uncertain,
+            "sectionReview": section_previews(text),
             "parseWarnings": ["Skill candidates from phrase matches and explicit lists, not verified proficiency or a complete resume assessment. "
                               "Review the detected skills; education and work-history extraction are limited."]}
 
