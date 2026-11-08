@@ -123,16 +123,19 @@ class SlateService:
             raise SlateError("role_unknown", "No sample listings for that role yet.")
         return {"milestones": ms}
 
-    def _start_interview(self, target_role, mode="text") -> dict:
-        if mode != "text":
-            raise SlateError("mode_unsupported", "Only text mode in the MVP.")
-        return self.interviews.start(target_role, self.interviews.past_feedback())
+    def _start_interview(self, target_role, mode="text", resume_id=None) -> dict:
+        if mode not in ("text", "voice"):
+            raise SlateError("mode_unsupported", "mode must be 'text' or 'voice'.")
+        resume = self._resume(resume_id) if resume_id else {}
+        return self.interviews.start(target_role, self.interviews.past_feedback(), resume)
 
     def _answer_interview(self, session_id, text) -> dict:
         try:
             return self.interviews.answer(session_id, text)
         except KeyError:
             raise SlateError("session_not_found", "No interview session with that id.")
+        except ValueError as e:
+            raise SlateError("interview_invalid_state", str(e))
 
     def _interview_feedback(self, session_id) -> dict:
         try:
