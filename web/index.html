@@ -36,8 +36,9 @@ Skills: Python, Git, Excel, communication</textarea>
 <div><button id="parse">Parse resume text</button><span class="upl">or upload a PDF: <input type="file" id="pdffile" accept="application/pdf,.pdf"></span></div>
 <div id="parsed" class="msg"></div></section>
 
-<section id="s2" class="off"><h2><b>2</b>Job matches</h2>
+<section id="s2" class="off"><h2><b>2</b>Sample job comparisons</h2>
 <p class="note">Demo score = share of a listing's skills found on the resume, over 5 sample listings. The 75% threshold from the deck is not implemented, so nothing here is claimed as a good match.</p>
+<p id="coverage" class="note">Only five analyst/tech fixtures are available. Retail and customer-service roles are not covered. Ranking these fixtures does not choose your career target; the percentages are not resume-quality or employability scores.</p>
 <div id="jobs"></div></section>
 
 <section id="s3" class="off"><h2><b>3</b>Draft <span id="status" class="tag">draft</span></h2>
@@ -48,6 +49,7 @@ Skills: Python, Git, Excel, communication</textarea>
 <div id="dmsg" class="msg"></div></section>
 
 <section id="s4" class="off"><h2><b>4</b>Roadmap</h2>
+<p class="note">Data Analyst is a fixed demo roadmap, not a role inferred from your resume.</p>
 <button id="road">Build roadmap for Data Analyst</button><ul id="roadlist"></ul></section>
 
 <section id="s5" class="off"><h2><b>5</b>Mock interview</h2>
@@ -135,11 +137,11 @@ const on=id=>$(id).classList.remove("off");
 function say(id,t,bad){$(id).className="msg "+(bad?"bad":"ok");$(id).textContent=t}
 function showParsed(p,label){
   $("parsed").className="msg";
-  $("parsed").innerHTML=(label?esc(label)+"<br>":"")+"<b>"+esc(p.name)+"</b><br>"+p.skills.map(s=>'<span class="chip">'+esc(s)+"</span>").join("");
+  $("parsed").innerHTML=(label?esc(label)+"<br>":"")+"<b>"+esc(p.name)+"</b><br>"+p.skills.map(s=>'<span class="chip">'+esc(s)+"</span>").join("")+(p.skills.length?"":"<p>No supported skill phrases detected. This does not mean you have no skills.</p>")+'<p class="note">'+esc((p.parseWarnings||[]).join(" "))+'</p>'+(p.skillEvidence?.length?'<details><summary>Why these skills were detected</summary><ul>'+p.skillEvidence.map(e=>'<li>'+esc(e.skill)+': &quot;'+esc(e.matchedText)+'&quot;</li>').join("")+'</ul></details>':"");
 }
 async function loadJobs(){
   const j=await api("GET","/jobs?resumeId="+rid);
-  $("jobs").innerHTML=j.jobs.map(x=>`<div class="job"><div><b>${esc(x.title)}</b><br><small>${esc(x.company)} · ${esc(x.location)} · apply by ${esc(x.deadline)} · Demo fixture: ${esc(x.freshness||"unknown")} (not live-verified)</small><br><small>${esc(x.reason||"")}</small></div><div><span class="score">${Math.round(x.matchScore*100)}%</span> <button data-j="${esc(x.jobId)}">Tailor</button></div></div>`).join("");
+  $("jobs").innerHTML=j.jobs.map(x=>`<div class="job"><div><b>${esc(x.title)}</b><br><small>${esc(x.company)} · ${esc(x.location)} · apply by ${esc(x.deadline)} · Demo fixture: ${esc(x.freshness||"unknown")} (not live-verified)</small><br><small>${esc(x.reason||"")}</small></div><div><span class="score">${Math.round(x.matchScore*100)}% skill overlap</span> <button data-j="${esc(x.jobId)}">Tailor</button></div></div>`).join("");
   document.querySelectorAll("[data-j]").forEach(b=>b.onclick=()=>tailor(b.dataset.j));
   on("s2");on("s4");on("s5");
 }
