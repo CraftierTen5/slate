@@ -69,6 +69,77 @@ class GeminiLLM(LLMClient):
         except (KeyError, IndexError, TypeError):
             raise LLMError("LLM response had no text.")
 
+GROQ_API_BASE = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_DEFAULT_MODEL = "openai/gpt-oss-120b"
+
+
+class GroqLLM(LLMClient):
+    """Groq Cloud chat completions (OpenAI-compatible) over stdlib urllib.
+
+    Key comes from the LLM_API_KEY env var, the same server-side swap
+    convention as GeminiLLM. Verified against the free tier (Nov 8, 2026).
+    """
+
+    def __init__(self, model: str = GROQ_DEFAULT_MODEL, api_key: str = None, timeout: int = 30):
+        self.model = model
+        self.api_key = api_key if api_key is not None else os.environ.get("LLM_API_KEY", "")
+        self.timeout = timeout
+
+    def _request_body(self, prompt: str) -> bytes:
+        return json.dumps({
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+        }).encode()
+
+    def generate(self, prompt: str) -> str:
+        if not self.api_key:
+            raise LLMError("LLM_API_KEY is not set on the server.")
+        req = urllib.request.Request(
+            GROQ_API_BASE,
+            data=self._request_body(prompt),
+            headers={"content-type": "application/json",
+                     # Groq's edge 403s urllib's default user agent
+                     "user-agent": "slate/0.1 (python-urllib)",
+                     "authorization": f"Bearer {self.api_key}"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                data = json.loads(resp.read().decode())
+        except Exception as e:
+            raise LLMError(f"LLM request failed: {e}")
+        try:
+            return data["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError):
+            raise LLMError("LLM response had no text.")
+
+
+def llm_tailored_draft(parsed: dict, job: dict, client: LLMClient) -> dict:
+    """LLM-generated tailored draft with the claim gate kept.
+
+    Returns the build_draft shape plus flaggedClaims and requiresApproval.
+    The gate is a heuristic over free text: it checks which of the job's
+    skills the LLM text mentions and flags any the parsed resume does not
+    back. It is weaker than the structured claim check on edits, so a
+    human approves every LLM draft before it is shown as final.
+    """
+    from .tailor import check_claims
+    text = client.generate(build_tailor_prompt(parsed, job))
+    resume, _, note = text.partition("COVER NOTE")
+    resume = resume.replace("RESUME", "", 1).strip(" :\n")
+    note = note.strip(" :\n")
+    low = text.lower()
+    claims = [s for s in job["skills"] if s.lower() in low]
+    flagged = check_claims(parsed, claims)
+    return {
+        "tailoredResume": resume,
+        "coverNote": note,
+        "claims": claims,
+        "gaps": [s for s in job["skills"] if s not in claims],
+        "flaggedClaims": flagged,
+        "requiresApproval": True,
+    }
+
 
 def build_tailor_prompt(parsed: dict, job: dict) -> str:
     """Prompt for a tailored resume draft and cover note. Callers must keep the
