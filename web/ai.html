@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Slate - AI draft (opt-in)</title>
+<style>
+:root{--navy:#14213d;--blue:#2457c5;--line:#e3e7ee;--mut:#5b6678;--bad:#b3261e;--warn:#8a5a00}
+*{box-sizing:border-box}body{margin:0;font:16px/1.5 system-ui,sans-serif;color:var(--navy);background:#fff}
+main{max-width:760px;margin:0 auto;padding:24px 16px 64px}
+h1{font-size:28px;margin:0}h1 span{color:var(--blue)}p.sub{color:var(--mut);margin:4px 0 24px}
+section{border:1px solid var(--line);border-radius:12px;padding:16px;margin:0 0 16px}
+section.off{opacity:.45;pointer-events:none}
+h2{font-size:17px;margin:0 0 10px}h2 b{display:inline-block;width:24px;height:24px;border-radius:50%;background:var(--navy);color:#fff;text-align:center;font-size:13px;line-height:24px;margin-right:8px}
+textarea{width:100%;min-height:110px;border:1px solid var(--line);border-radius:8px;padding:10px;font:14px/1.4 ui-monospace,monospace;color:var(--navy)}
+select{font:inherit;padding:8px;border:1px solid var(--line);border-radius:8px;color:var(--navy)}
+button{background:var(--navy);color:#fff;border:0;border-radius:8px;padding:9px 14px;font:inherit;cursor:pointer;margin:8px 8px 0 0}
+button.sec{background:#fff;color:var(--navy);border:1px solid var(--navy)}
+button:disabled{opacity:.35;cursor:not-allowed}
+.warn{background:#fdf6e8;border:1px solid var(--warn);border-radius:8px;padding:10px 12px;margin:10px 0;font-size:14px;color:var(--warn)}
+.warn li{margin:2px 0}
+.msg{margin-top:8px;font-size:14px}.bad{color:var(--bad)}.ok{color:var(--blue)}
+.tag{display:inline-block;border:1px solid var(--mut);color:var(--mut);border-radius:6px;padding:0 8px;font-size:13px}
+.tag.approved{border-color:var(--navy);color:#fff;background:var(--navy)}.tag.rejected{border-color:var(--bad);color:var(--bad)}
+pre{white-space:pre-wrap;background:#f5f7fb;border-radius:8px;padding:10px 12px;font:13px/1.5 ui-monospace,monospace}
+.banner{border:1px solid var(--blue);background:#eef2fb;border-radius:12px;padding:12px 14px;margin:0 0 16px;font-size:14px}
+</style></head><body><main>
+<h1>Slate<span>.</span> <small style="font-size:15px;color:var(--mut)">AI draft (opt-in demo)</small></h1>
+<p class="sub">This page calls the real LLM through <code>POST /v1/tailor/ai</code>. It only works when the server was started with a key. Sample data only.</p>
+
+<div class="banner"><b>Human review is required.</b> The LLM can invent claims. Every draft below stays a draft until a person approves it, and the server's claim rules re-check it at approval and export. The rules catch unsupported skills, inflated durations, invented percentages/GPA and unknown degrees - they cannot catch every invented employer or project.</div>
+
+<section id="s1"><h2><b>1</b>Resume text</h2>
+<textarea id="resume">Asha Verma
+B.Tech Computer Science, IIITM Gwalior, 2027
+Intern at ExampleCo (3 months)
+Skills: Python, Git, Excel, communication</textarea>
+<div><button id="parse">Parse resume</button></div>
+<div id="parsed" class="msg"></div></section>
+
+<section id="s2" class="off"><h2><b>2</b>Pick a sample job</h2>
+<select id="job"></select>
+<div><button id="gen">Generate AI draft</button></div>
+<div id="genmsg" class="msg"></div></section>
+
+<section id="s3" class="off"><h2><b>3</b>Review the AI draft <span id="status" class="tag">draft</span></h2>
+<div id="flags"></div>
+<h3 style="font-size:14px;margin:10px 0 4px">Tailored resume</h3>
+<pre id="dres"></pre>
+<h3 style="font-size:14px;margin:10px 0 4px">Cover note</h3>
+<pre id="dnote"></pre>
+<div><button id="approve">Approve (human decision)</button><button id="reject" class="sec">Reject</button></div>
+<div id="decision" class="msg"></div></section>
+
+<script>
+let resumeId=null, draftId=null;
+async function api(path, method, body){
+  const r=await fetch("/v1"+path,{method,headers:{"content-type":"application/json"},body:body?JSON.stringify(body):undefined});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok){throw new Error((j.error&&j.error.message)||r.statusText)}
+  return j;
+}
+document.getElementById("parse").onclick=async()=>{
+  const msg=document.getElementById("parsed");
+  try{
+    const r=await api("/resume","POST",{text:document.getElementById("resume").value});
+    resumeId=r.resumeId;
+    msg.innerHTML="Parsed as "+resumeId+" - skills: "+(r.parsed.skills.join(", ")||"none found");
+    const j=await api("/jobs","GET");
+    const sel=document.getElementById("job");
+    sel.innerHTML=j.jobs.map(x=>`<option value="${x.jobId}">${x.title} at ${x.company}</option>`).join("");
+    document.getElementById("s2").classList.remove("off");
+  }catch(e){msg.innerHTML='<span class="bad">'+e.message+"</span>"}
+};
+document.getElementById("gen").onclick=async()=>{
+  const msg=document.getElementById("genmsg");
+  try{
+    const d=await api("/tailor/ai","POST",{resumeId,jobId:document.getElementById("job").value});
+    draftId=d.draftId;
+    msg.innerHTML='AI draft '+draftId+' created (requiresApproval: '+d.requiresApproval+')';
+    document.getElementById("dres").textContent=d.tailoredResume;
+    document.getElementById("dnote").textContent=d.coverNote;
+    const f=[];
+    if(d.flaggedClaims&&d.flaggedClaims.length)f.push("Skills the resume does not list: "+d.flaggedClaims.join(", "));
+    (d.violations||[]).forEach(v=>f.push(v));
+    document.getElementById("flags").innerHTML=f.length
+      ?'<div class="warn"><b>Claim rule warnings - check these before approving:</b><ul>'+f.map(x=>"<li>"+x+"</li>").join("")+"</ul></div>"
+      :'<div class="msg ok">No rule-detectable unsupported claim. That is not a fact check - still review by eye.</div>';
+    document.getElementById("s3").classList.remove("off");
+  }catch(e){msg.innerHTML='<span class="bad">'+e.message+"</span>"}
+};
+async function decide(what){
+  const el=document.getElementById("decision");
+  try{
+    const r=await api("/approvals","POST",{draftId,decision:what});
+    document.getElementById("status").textContent=r.status;
+    document.getElementById("status").className="tag "+r.status;
+    el.innerHTML='Decision stored: '+r.status;
+  }catch(e){el.innerHTML='<span class="bad">'+e.message+"</span>"}
+}
+document.getElementById("approve").onclick=()=>decide("approve");
+document.getElementById("reject").onclick=()=>decide("reject");
+// Auto-demo: open /ai#demo to run parse > generate without clicks (used for demos and screenshots). Still never auto-approves.
+if(location.hash==="#demo"){document.getElementById("parse").click();setTimeout(()=>document.getElementById("gen").click(),600)}
+</script>
+</main></body></html>
