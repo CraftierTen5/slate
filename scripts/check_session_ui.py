@@ -67,8 +67,22 @@ with tempfile.TemporaryDirectory() as tmp:
                     if path == '/' and result == 'success':
                         page.screenshot(path=os.environ.get('SESSION_SCREENSHOT', '/tmp/slate-session-clean.png'), full_page=True)
                     page.close()
+            # Loading an externally supplied fragment must never create/approve
+            # anything, even in an already signed-in browser.
+            for fragment in ('demo', 'demo-approve', 'demo-reject'):
+                page = browser.new_page()
+                page.add_init_script("sessionStorage.setItem('slate_token','dev:fixture@example.com')")
+                writes = []
+                def record_write(request):
+                    if request.method == 'POST': writes.append(request.url)
+                page.on('request', record_write)
+                page.goto('http://127.0.0.1:8014/ai#'+fragment)
+                page.get_by_text('Signed in as user', exact=False).wait_for()
+                page.wait_for_timeout(200)
+                assert not writes, writes
+                page.close()
             browser.close()
-        print('8 synthetic account-switch/late-response browser cases passed; server stopped')
+        print('8 account-switch cases + 3 no-mutation URL-fragment cases passed; server stopped')
     finally:
         proc.terminate()
         proc.wait(timeout=10)
