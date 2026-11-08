@@ -2,7 +2,9 @@ import io
 import re
 from .skills import skill_evidence, resume_skill_evidence
 
-MAX_PDF_BYTES = 5 * 1024 * 1024
+MAX_PDF_BYTES = 5_000_000
+MAX_RESUME_CHARS = 200_000
+MAX_PDF_PAGES = 20
 
 class ParseError(ValueError):
     pass
@@ -11,6 +13,8 @@ def parse_resume(text: str) -> dict:
     """Pull name, skills, education and experience from plain resume text."""
     if not isinstance(text, str) or len(text.strip()) < 20:
         raise ParseError("Resume text is empty or too short to parse.")
+    if len(text) > MAX_RESUME_CHARS:
+        raise ParseError("Resume text is too long (200,000 characters max).")
     text = _without_template_tips(text)
     lines = [l.strip() for l in text.splitlines() if l.strip()]
     if not lines:
@@ -51,16 +55,17 @@ def _without_template_tips(text):
     """
     pattern = re.compile(r"\(\s*tip\s*:", re.I)
     pos, chunks = 0, []
-    for match in pattern.finditer(text):
-        if match.start() < pos:
-            continue
+    while True:
+        match = pattern.search(text, pos)
+        if not match:
+            break
         depth, end = 1, match.end()
         while end < len(text) and depth:
             if text[end] == "(": depth += 1
             elif text[end] == ")": depth -= 1
             end += 1
-        if depth:  # malformed guidance: keep it rather than lose resume content
-            continue
+        if depth:  # keep the unmatched remainder; never rescan it quadratically
+            break
         chunks.append(text[pos:match.start()]); chunks.append("\n")
         pos = end
     chunks.append(text[pos:])
@@ -83,7 +88,16 @@ def extract_pdf_text(data: bytes) -> str:
         reader = PdfReader(io.BytesIO(data))
         if reader.is_encrypted:
             raise ParseError("That PDF is password-protected; export it without a password and retry.")
-        text = "\n".join((page.extract_text() or "") for page in reader.pages)
+        if len(reader.pages) > MAX_PDF_PAGES:
+            raise ParseError("PDF has too many pages (20 max). Export only your resume pages and retry.")
+        chunks, total = [], 0
+        for page in reader.pages:
+            chunk = page.extract_text() or ""
+            total += len(chunk) + 1
+            if total > MAX_RESUME_CHARS:
+                raise ParseError("PDF text is too long (200,000 characters max).")
+            chunks.append(chunk)
+        text = "\n".join(chunks)
     except ParseError:
         raise
     except Exception:
