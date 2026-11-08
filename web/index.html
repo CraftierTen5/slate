@@ -46,7 +46,7 @@ Skills: Python, Git, Excel, communication</textarea>
 <button id="road">Build roadmap for Data Analyst</button><ul id="roadlist"></ul></section>
 
 <section id="s5" class="off"><h2><b>5</b>Mock interview</h2>
-<button id="start">Start session</button><div id="iv"></div></section>
+<label for="ivmode">Interview mode</label> <select id="ivmode"><option value="text">Text</option><option value="voice">Voice</option></select> <button id="start">Start session</button><div id="iv"></div></section>
 </main>
 <script>
 const $=id=>document.getElementById(id);
@@ -84,11 +84,15 @@ $("reject").onclick=async()=>{try{const r=await api("POST","/approvals",{draftId
 $("export").onclick=async()=>{try{await api("GET","/drafts/"+did+"/export");say("dmsg","Export allowed by the demo gate: this saved version is approved and no rule-detectable unsupported claim was found. Not a fact check; review it yourself.")}catch(e){say("dmsg",e.message,1)}};
 $("road").onclick=async()=>{try{const r=await api("POST","/roadmap",{resumeId:rid,targetRole:"Data Analyst"});
   $("roadlist").innerHTML=r.milestones.map(m=>`<li><b>${esc(m.title)}</b> · ${m.etaWeeks} wk<br><small>${esc(m.why)}</small></li>`).join("")}catch(e){$("roadlist").innerHTML='<li class="bad">'+esc(e.message)+"</li>"}};
-let qs=0;
-function showQ(t){$("iv").innerHTML=`<div class="q">${esc(t)}</div><textarea id="ans" style="min-height:70px"></textarea><button id="send">Answer</button><div id="fb" class="msg"></div>`;$("send").onclick=answer}
-$("start").onclick=async()=>{try{const r=await api("POST","/interview/mock",{targetRole:"Data Analyst"});sid=r.sessionId;showQ(r.firstQuestion);
-  if(r.carriedFromEarlier.length)$("iv").insertAdjacentHTML("afterbegin",'<p class="msg">Carried over from earlier sessions: '+esc(r.carriedFromEarlier.join("; "))+"</p>")}catch(e){$("iv").textContent=e.message}};
-async function answer(){try{const r=await api("POST","/interview/"+sid+"/answer",{text:$("ans").value});
-  if(r.done){const f=await api("GET","/interview/"+sid+"/feedback");$("iv").innerHTML="<p><b>"+esc(f.summary)+"</b></p>"+(f.weakAreas.length?"<p>Weak areas:</p><ul>"+f.weakAreas.map(w=>"<li>"+esc(w)+"</li>").join("")+"</ul>":"")}
-  else showQ(r.nextQuestion)}catch(e){$("fb").textContent=e.message}}
+let voiceMode=false, recognition=null;
+function speak(t){if(voiceMode&&"speechSynthesis"in window){speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.rate=1;speechSynthesis.speak(u)}}
+function showQ(t){$("iv").innerHTML=`<div class="q">${esc(t)}</div><textarea id="ans" style="min-height:70px" placeholder="Type your answer, or use voice input"></textarea><button id="send">Submit answer</button><button id="listen" class="sec">Start voice input</button><div id="fb" class="msg"></div>`;$("send").onclick=answer;$("listen").onclick=listen;speak(t)}
+function listen(){const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){$("fb").textContent="Speech recognition is not supported here. Type your answer instead.";return}
+ recognition=new SR();recognition.lang="en-IN";recognition.interimResults=true;recognition.onresult=e=>{let v="";for(let i=e.resultIndex;i<e.results.length;i++)v+=e.results[i][0].transcript;$("ans").value=v};recognition.onerror=()=>{$("fb").textContent="Voice input failed. Type your answer instead."};recognition.start();$("fb").textContent="Listening…"}
+$("start").onclick=async()=>{try{voiceMode=$("ivmode").value==="voice";const r=await api("POST","/interview/mock",{targetRole:"Data Analyst",mode:$("ivmode").value,resumeId:rid});sid=r.sessionId;showQ(r.firstQuestion);
+ if(r.carriedFromEarlier.length)$("iv").insertAdjacentHTML("afterbegin",'<p class="msg">Carried over from earlier sessions: '+esc(r.carriedFromEarlier.join("; "))+"</p>");
+ if(voiceMode&&!("SpeechRecognition"in window||"webkitSpeechRecognition"in window))$("iv").insertAdjacentHTML("beforeend",'<p class="note">Voice recognition unavailable in this browser; text input remains enabled.</p>')}catch(e){$("iv").textContent=e.message}};
+async function answer(){try{if(recognition)recognition.stop();const r=await api("POST","/interview/"+sid+"/answer",{text:$("ans").value});
+ if(r.done){const f=await api("GET","/interview/"+sid+"/feedback");$("iv").innerHTML="<p><b>"+esc(f.summary)+"</b></p><p>Average score: "+esc(f.averageScore)+"/5</p>"+(f.strengths.length?"<p>Strengths:</p><ul>"+f.strengths.map(x=>"<li>"+esc(x)+"</li>").join("")+"</ul>":"")+(f.improvements.length?"<p>Improvements:</p><ul>"+f.improvements.map(x=>"<li>"+esc(x)+"</li>").join("")+"</ul>":"")+(f.weakAreas.length?"<p>Areas to revisit:</p><ul>"+f.weakAreas.map(x=>"<li>"+esc(x)+"</li>").join("")+"</ul>":"")}
+ else{const fb=$("fb");if(fb)fb.textContent=(r.evaluation&&r.evaluation.assessment)||"Answer received.";showQ(r.nextQuestion)}}catch(e){const fb=$("fb");if(fb)fb.textContent=e.message}}
 </script></body></html>
