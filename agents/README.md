@@ -96,3 +96,14 @@ Postgres was not run. Whole-document rewriting and database lock timeouts remain
 limits; SQL operational failures are not automatically retried. The memory
 store is still single-process/ephemeral, and legacy `SqlSnapshot` and direct
 unconditional `SqlUserStore.save` are not the authenticated concurrency path.
+
+### PDF route execution
+
+PDF decoding runs in FastAPI's synchronous endpoint worker pool, including the
+blocking per-user state lock and bounded file read. The previous async route
+could hold that lock while yielding for a spooled-file read: a second request
+could then block the event loop waiting for the same lock. A timed subprocess
+regression covers two same-user PDF calls and event-loop progress. This does
+not sandbox pypdf CPU/memory use or add request-body/page caps by itself; see
+separate upload hardening PR29. On combining branches, preserve the synchronous
+`file.file.read(5_000_001)` route and PR29's other upload/decoder limits.
