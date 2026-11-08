@@ -35,6 +35,7 @@ STATUS.setdefault("ai_not_configured", 503)  # appended, so sibling PRs editing 
 STATUS.setdefault("unauthenticated", 401)
 STATUS.setdefault("invalid_token", 401)
 STATUS.setdefault("auth_not_configured", 503)
+STATUS.setdefault("state_conflict", 409)
 
 class ResumeIn(BaseModel):
     text: str = Field(max_length=200_000)  # plain text for now; PDF upload is an open question in the contract
@@ -206,7 +207,7 @@ def create_authenticated_app(auth, user_store, llm_client=None) -> FastAPI:
     read from the request; demo reset wipes only the caller's own data."""
     from contextlib import contextmanager
     from slate_core.ai_service import AISlateService
-    from slate_core.user_store import UserSnapshot, locked
+    from slate_core.user_store import UserSnapshot, WriteConflict, locked
 
     @contextmanager
     def get_svc(request: Request):
@@ -216,7 +217,10 @@ def create_authenticated_app(auth, user_store, llm_client=None) -> FastAPI:
                              "(or SUPABASE_URL + SUPABASE_ANON_KEY), or SLATE_DEV_AUTH=1 for local dev.")
         user = auth.authenticate(request.headers.get("authorization"))
         with locked(user.id):  # serializes a user's own concurrent requests; see user_store.locked
-            yield AISlateService(UserSnapshot(user_store, user.id), llm_client=llm_client)
+            try:
+                yield AISlateService(UserSnapshot(user_store, user.id), llm_client=llm_client)
+            except WriteConflict:
+                raise SlateError("state_conflict", "Your saved data changed in another request. Nothing from this request was saved. Reopen the latest version and try again.") from None
 
     r = APIRouter(prefix="/v1")
 
