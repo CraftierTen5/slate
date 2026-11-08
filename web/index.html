@@ -63,17 +63,26 @@ async function api(method,path,body){
   if(token()) h["authorization"]="Bearer "+token();
   const r=await fetch("/v1"+path,{method,headers:h,body:body?JSON.stringify(body):undefined});
   const j=await r.json();
-  if(r.status===401){sessionStorage.removeItem("slate_token");showLogin("Sign-in expired or missing - please sign in again.")}
+  if(r.status===401){await recoverSignIn()}
   if(!r.ok) throw new Error(j.error?j.error.message:"Request failed"); return j;
 }
 function showLogin(note){
   $("loginbox").style.display="";
   if(note) $("loginmsg").innerHTML='<span class="bad">'+esc(note)+"</span>";
 }
+let authRecovery=null;
+async function recoverSignIn(){
+  sessionStorage.removeItem("slate_token");
+  showLogin("Sign-in expired or missing - please sign in again. Your saved data is unchanged.");
+  // Rebuild the actual control, not just a message. Never retry a mutation
+  // automatically: the user resumes the action after authenticating.
+  if(!authRecovery) authRecovery=initAuth().finally(()=>{authRecovery=null});
+  await authRecovery;
+}
 function signedIn(email){
   $("loginctl").innerHTML="";
   $("loginmsg").innerHTML='<span class="ok">Signed in as '+esc(email||"user")+'</span> <button class="sec" id="out">Sign out</button>';
-  $("out").onclick=()=>{sessionStorage.removeItem("slate_token");location.reload()};
+  $("out").onclick=()=>{sessionStorage.removeItem("slate_token");if(window.google?.accounts?.id) google.accounts.id.disableAutoSelect();location.reload()};
 }
 async function initAuth(){
   let cfg={mode:"unconfigured"};
@@ -86,15 +95,23 @@ async function initAuth(){
       sessionStorage.setItem("slate_token","dev:"+m); signedIn(m);};
   }else if(cfg.mode==="google"){
     ctl.innerHTML="<div id=\"gbtn\"></div>";
-    const s=document.createElement("script");
-    s.src="https://accounts.google.com/gsi/client"; s.async=true;
-    s.onload=()=>{
+    const renderGoogle=()=>{
       google.accounts.id.initialize({client_id:cfg.googleClientId, callback:(resp)=>{
         sessionStorage.setItem("slate_token",resp.credential); signedIn();
       }});
       google.accounts.id.renderButton($("gbtn"),{theme:"outline",size:"large"});
     };
-    document.head.appendChild(s);
+    if(window.google?.accounts?.id){renderGoogle()}
+    else{
+      let script=document.getElementById("google-identity-script");
+      if(!script){
+        script=document.createElement("script");script.id="google-identity-script";
+        script.src="https://accounts.google.com/gsi/client";script.async=true;
+      }
+      script.onload=renderGoogle;
+      script.onerror=()=>showLogin("Google sign-in could not load. Check your connection and reload this page.");
+      if(!script.isConnected) document.head.appendChild(script);
+    }
   }else if(cfg.mode==="supabase"){
     ctl.innerHTML='<button id="sbgo">Sign in with Google</button>';
     const s=document.createElement("script");
@@ -134,7 +151,7 @@ $("pdffile").onchange=async()=>{const f=$("pdffile").files[0];if(!f)return;try{
   const fd=new FormData();fd.append("file",f);
   const ph={}; if(token()) ph["authorization"]="Bearer "+token();
   const res=await fetch("/v1/resume/pdf",{method:"POST",headers:ph,body:fd});
-  if(res.status===401){sessionStorage.removeItem("slate_token");showLogin("Sign-in expired or missing - please sign in again.")}
+  if(res.status===401){await recoverSignIn()}
   const j=await res.json(); if(!res.ok) throw new Error(j.error?j.error.message:"Upload failed");
   rid=j.resumeId; showParsed(j.parsed,"Uploaded PDF: "+f.name); await loadJobs();
 }catch(e){say("parsed",e.message,1)}};
