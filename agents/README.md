@@ -23,3 +23,9 @@ not resume quality, employability, or a career recommendation. No new retail job
 were invented to make a score look better. Data Analyst remains a fixed demo
 roadmap, not an inferred target role. Existing saved parses are immutable snapshots:
 re-upload/reparse to use updated extraction, without silently changing old drafts.
+
+Negative, aspirational and explicitly instructional English contexts are flagged in
+`uncertainSkills`, not counted as skill evidence without review. A separate
+positive mention can support the same candidate. Context rules are conservative,
+not general semantic negation detection in every language. This filter applies
+only when parsing a resume; draft claim checks still detect all known mentions.
