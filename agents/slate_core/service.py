@@ -75,6 +75,22 @@ class SlateService:
         self._texts[rid] = text
         return {"resumeId": rid, "parsed": parsed}
 
+    def list_resumes(self):
+        """Only this service's verified user's snapshots, newest first."""
+        return {"totalCount": len(self._resumes), "resumes": [{"resumeId": rid, "name": parsed.get("name", "Unknown"),
+                             "reviewStatus": parsed.get("skillReview", {}).get("status", "extracted_candidates"),
+                             "parentResumeId": parsed.get("skillReview", {}).get("parentResumeId"),
+                             "skillCount": len(parsed.get("skills", []))}
+                            for rid, parsed in list(reversed(list(self._resumes.items())))[:100]]}
+
+    def get_resume(self, resume_id):
+        import copy
+        parsed = self._resume(resume_id)
+        original = parsed.get("skillReview", {}).get("originalResumeId", resume_id)
+        return {"resumeId": resume_id, "parsed": copy.deepcopy(parsed),
+                "sourceText": self._texts[original],
+                "sourceTextKind": "original_uploaded_text_not_user_addendum"}
+
     def review_resume_skills(self, resume_id, skills, confirm=False):
         """A correction is a new immutable source snapshot, never silent reapproval."""
         from .resume_review import reviewed_snapshot

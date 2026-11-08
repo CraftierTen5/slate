@@ -29,6 +29,11 @@ li{margin:4px 0}.q{background:#f5f7fb;border-radius:8px;padding:8px 10px;margin-
 <div id="loginmsg" class="msg"></div></section>
 
 <section id="s1"><h2><b>1</b>Your resume</h2>
+<div><button id="refreshsaved" class="sec">Load my saved versions</button>
+<select id="savedversions" aria-label="Saved resume versions"><option value="">Choose a saved version</option></select>
+<button id="opensaved" class="sec">Open selected version</button></div>
+<p class="note">Saved versions belong to this signed-in user. Reopening keeps original source and your review separate; it does not reparse or approve a draft.</p>
+<div id="savedmsg" class="msg"></div>
 <textarea id="resume">Asha Verma
 B.Tech Computer Science, IIITM Gwalior, 2027
 Intern at ExampleCo (3 months)
@@ -67,12 +72,17 @@ const $=id=>document.getElementById(id);
 let rid=null,did=null,sid=null;
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 function token(){return sessionStorage.getItem("slate_token")||""}
+class StaleResponse extends Error {}
 async function api(method,path,body){
+  const auth=token(),generation=sourceGeneration,requestEpoch=sourceRequest;
   const h={"content-type":"application/json"};
-  if(token()) h["authorization"]="Bearer "+token();
-  const r=await fetch("/v1"+path,{method,headers:h,body:body?JSON.stringify(body):undefined});
+  if(auth) h["authorization"]="Bearer "+auth;
+  let r;
+  try{r=await fetch("/v1"+path,{method,headers:h,body:body?JSON.stringify(body):undefined})}
+  catch(e){if(auth!==token()||generation!==sourceGeneration||requestEpoch!==sourceRequest)throw new StaleResponse();throw e}
   const j=await r.json();
-  if(r.status===401){await recoverSignIn()}
+  if(auth!==token()||generation!==sourceGeneration||requestEpoch!==sourceRequest) throw new StaleResponse();
+  if(r.status===401){await recoverSignIn();throw new StaleResponse()}
   if(!r.ok) throw new Error(j.error?j.error.message:"Request failed"); return j;
 }
 function showLogin(note){
@@ -82,6 +92,7 @@ function showLogin(note){
 let authRecovery=null;
 async function recoverSignIn(){
   sessionStorage.removeItem("slate_token");
+  resetAccountState();
   showLogin("Sign-in expired or missing - please sign in again. Your saved data is unchanged.");
   // Rebuild the actual control, not just a message. Never retry a mutation
   // automatically: the user resumes the action after authenticating.
@@ -89,13 +100,15 @@ async function recoverSignIn(){
   await authRecovery;
 }
 function signedIn(email){
+  resetAccountState();
   $("loginctl").innerHTML="";
   $("loginmsg").innerHTML='<span class="ok">Signed in as '+esc(email||"user")+'</span> <button class="sec" id="out">Sign out</button>';
+  loadSavedVersions();
   $("out").onclick=()=>{sessionStorage.removeItem("slate_token");if(window.google?.accounts?.id) google.accounts.id.disableAutoSelect();location.reload()};
 }
 async function initAuth(){
   let cfg={mode:"unconfigured"};
-  try{cfg=await (await fetch("/v1/config")).json()}catch(e){}
+  try{cfg=await (await fetch("/v1/config")).json()}catch(e){if(e instanceof StaleResponse)return;}
   const ctl=$("loginctl");
   if(token()){signedIn();return}
   if(cfg.mode==="dev"){
@@ -142,6 +155,38 @@ function refresh(){const dirty=$('dres').value!==savedRes||$('dnote').value!==sa
 $('dres').oninput=$('dnote').oninput=refresh;
 const on=id=>$(id).classList.remove("off");
 function say(id,t,bad){$(id).className="msg "+(bad?"bad":"ok");$(id).textContent=t}
+let sourceGeneration=0, sourceRequest=0, draftGeneration=0;
+function resetAccountState(){
+  sourceRequest++;resetSourceResults();rid=null;
+  $("resume").value="";$("parsed").textContent="";$("skillreview").hidden=true;
+  $("reviewskills").value="";$("confirmreview").checked=false;$("pdffile").value="";
+  $("savedversions").innerHTML='<option value="">Choose a saved version</option>';
+  ["savedmsg","reviewmsg","dmsg"].forEach(id=>$(id).textContent="");
+}
+function resetSourceResults(){
+  $("reviewmsg").textContent="";
+  sourceGeneration++;draftGeneration++;did=null;sid=null;savedRes="";savedNote="";
+  $("dres").value="";$("dnote").value="";setStatus("draft");refresh();
+  $("jobs").innerHTML="";$("roadlist").innerHTML="";$("iv").innerHTML="";
+  ["s2","s3","s4","s5"].forEach(id=>$(id).classList.add("off"));
+  say("dmsg","Choose a job to create a fresh unapproved draft for this resume version.");
+}
+async function loadSavedVersions(){try{
+  if(!token()) return;
+  const request=sourceRequest;
+  const result=await api("GET","/resume");if(request!==sourceRequest)return;
+  $("savedversions").innerHTML='<option value="">Choose a saved version</option>'+result.resumes.map(r=>'<option value="'+esc(r.resumeId)+'">'+esc(r.resumeId)+': '+esc(r.name)+' · '+r.skillCount+' skills · '+(r.parentResumeId?'reviewed version':'extracted candidates')+'</option>').join("");
+  say("savedmsg",result.resumes.length?"Showing "+result.resumes.length+" of "+result.totalCount+" saved versions, newest first. Select one to reopen.":"No saved versions for this signed-in user yet.");
+}catch(e){if(e instanceof StaleResponse)return;say("savedmsg",e.message,1)}}
+$("refreshsaved").onclick=loadSavedVersions;
+$("opensaved").onclick=async()=>{try{
+  const selected=$("savedversions").value;if(!selected) throw new Error("Choose a saved version first.");
+  const request=++sourceRequest;
+  const result=await api("GET","/resume/"+encodeURIComponent(selected));if(request!==sourceRequest)return;
+  resetSourceResults();rid=result.resumeId;$("resume").value=result.sourceText;
+  showParsed(result.parsed,"Reopened saved version: "+rid+". Text box shows the original upload, not added skill statements.");
+  await loadJobs();
+}catch(e){if(e instanceof StaleResponse)return;say("savedmsg",e.message,1)}};
 function showParsed(p,label){
   $("parsed").className="msg";
   $("parsed").innerHTML=(label?esc(label)+"<br>":"")+"<b>"+esc(p.name)+"</b><br>"+p.skills.map(s=>'<span class="chip">'+esc(s)+"</span>").join("")+(p.skills.length?"":"<p>No supported skill phrases detected. This does not mean you have no skills.</p>")+'<p class="note">'+esc((p.parseWarnings||[]).join(" "))+'</p>'+(p.skillEvidence?.length?'<details><summary>Skill source and review</summary><ul>'+p.skillEvidence.map(e=>'<li>'+esc(e.skill)+': &quot;'+esc(e.matchedText)+'&quot; ('+esc(({known_phrase:'source phrase',explicit_skill_list:'source skills list',legacy_parse:'legacy parse',user_statement:'your added statement, not extracted'})[e.source]||'source not recorded')+(e.reviewStatus==='user_confirmed'?', confirmed by you':'')+')</li>').join("")+'</ul></details>':"")+(p.uncertainSkills?.length?'<p class="note">Not counted without review: '+p.uncertainSkills.map(e=>esc(e.skill)+" ("+esc(e.reason)+")").join("; ")+"</p>":"");
@@ -153,7 +198,9 @@ function showParsed(p,label){
 
 }
 async function loadJobs(){
-  const j=await api("GET","/jobs?resumeId="+rid);
+  const requested=rid, generation=sourceGeneration;
+  const j=await api("GET","/jobs?resumeId="+encodeURIComponent(requested));
+  if(generation!==sourceGeneration||requested!==rid)return;
   $("jobs").innerHTML=j.jobs.map(x=>`<div class="job"><div><b>${esc(x.title)}</b><br><small>${esc(x.company)} · ${esc(x.location)} · apply by ${esc(x.deadline)} · Demo fixture: ${esc(x.freshness||"unknown")} (not live-verified)</small><br><small>${esc(x.reason||"")}</small></div><div><span class="score">${Math.round(x.matchScore*100)}% skill overlap</span> <button data-j="${esc(x.jobId)}">Tailor</button></div></div>`).join("");
   document.querySelectorAll("[data-j]").forEach(b=>b.onclick=()=>tailor(b.dataset.j));
   on("s2");on("s4");on("s5");
@@ -161,45 +208,52 @@ async function loadJobs(){
 $("savereview").onclick=async()=>{try{
   if(!$("confirmreview").checked) throw new Error("Confirm your skill statements before saving.");
   const skills=$("reviewskills").value.split("\n").map(x=>x.trim()).filter(Boolean);
-  const r=await api("POST","/resume/"+rid+"/skills/review",{skills,confirm:true});
-  rid=r.resumeId;did=null;savedRes="";savedNote="";$("dres").value="";$("dnote").value="";$("s3").classList.add("off");setStatus("draft");say("dmsg","Choose a job to create a new unapproved draft for the reviewed resume version.");refresh();
+  const request=++sourceRequest;
+  const r=await api("POST","/resume/"+rid+"/skills/review",{skills,confirm:true});if(request!==sourceRequest)return;
+  resetSourceResults();rid=r.resumeId;
   showParsed(r.parsed,"Saved user-reviewed version: "+r.resumeId);
   say("reviewmsg","Saved for this signed-in user. Prior source preserved. "+r.invalidatedDraftIds.length+" previous approval(s) cleared. Choose a job to make a fresh unapproved draft.");
-  await loadJobs();
-}catch(e){say("reviewmsg",e.message,1)}};
+  await loadSavedVersions();await loadJobs();
+}catch(e){if(e instanceof StaleResponse)return;say("reviewmsg",e.message,1)}};
 $("parse").onclick=async()=>{try{
-  const r=await api("POST","/resume",{text:$("resume").value}); rid=r.resumeId;
-  showParsed(r.parsed); await loadJobs();
-}catch(e){say("parsed",e.message,1)}};
-$("pdffile").onchange=async()=>{const f=$("pdffile").files[0];if(!f)return;try{
+  const request=++sourceRequest;
+  const r=await api("POST","/resume",{text:$("resume").value});if(request!==sourceRequest)return; resetSourceResults();rid=r.resumeId;
+  showParsed(r.parsed); await loadSavedVersions();await loadJobs();
+}catch(e){if(e instanceof StaleResponse)return;say("parsed",e.message,1)}};
+$("pdffile").onchange=async()=>{const f=$("pdffile").files[0];if(!f)return;
+  const request=++sourceRequest,auth=token(),generation=sourceGeneration,requestEpoch=sourceRequest;
+  try{
   const fd=new FormData();fd.append("file",f);
   const ph={}; if(token()) ph["authorization"]="Bearer "+token();
   const res=await fetch("/v1/resume/pdf",{method:"POST",headers:ph,body:fd});
-  if(res.status===401){await recoverSignIn()}
+  if(auth!==token()||generation!==sourceGeneration||requestEpoch!==sourceRequest||request!==sourceRequest)return;
+  if(res.status===401){await recoverSignIn();return}
   const j=await res.json(); if(!res.ok) throw new Error(j.error?j.error.message:"Upload failed");
-  rid=j.resumeId; showParsed(j.parsed,"Uploaded PDF: "+f.name); await loadJobs();
-}catch(e){say("parsed",e.message,1)}};
+  if(request!==sourceRequest)return; resetSourceResults();rid=j.resumeId; $("resume").value=j.sourceText; showParsed(j.parsed,"Uploaded PDF: "+f.name); await loadSavedVersions();await loadJobs();
+}catch(e){if(e instanceof StaleResponse||auth!==token()||generation!==sourceGeneration||request!==sourceRequest)return;say("parsed",e.message,1)}};
 function setStatus(s){$("status").textContent=s;$("status").className="tag "+s}
-async function tailor(j){try{
-  const d=await api("POST","/tailor",{resumeId:rid,jobId:j}); did=d.draftId;
+async function tailor(j){const epoch=++draftGeneration;try{
+  const requested=rid,generation=sourceGeneration;
+  const d=await api("POST","/tailor",{resumeId:requested,jobId:j});if(epoch!==draftGeneration||generation!==sourceGeneration||requested!==rid)return; did=d.draftId;
   $("dres").value=savedRes=d.tailoredResume;$("dnote").value=savedNote=d.coverNote;setStatus("draft");refresh();
   say("dmsg","Draft only. Skill gaps for this job: "+(d.skillGaps.join(", ")||"none")+". A person must review it before use.");on("s3");
-}catch(e){say("dmsg",e.message,1)}}
-$("edit").onclick=async()=>{try{
+}catch(e){if(e instanceof StaleResponse||epoch!==draftGeneration)return;say("dmsg",e.message,1)}}
+$("edit").onclick=async()=>{const epoch=++draftGeneration,requested=did;try{
+  const generation=sourceGeneration;
   const r=await api("POST","/drafts/"+did+"/edit",{tailoredResume:$("dres").value,coverNote:$("dnote").value});
-  did=r.draftId;savedRes=$("dres").value;savedNote=$("dnote").value;setStatus("draft");refresh();say("dmsg","Saved as a new draft. It needs its own approval.");
-}catch(e){say("dmsg",e.message,1)}};
-$("approve").onclick=async()=>{try{const r=await api("POST","/approvals",{draftId:did,decision:"approve"});setStatus(r.status);say("dmsg","Saved draft approved in this demo. Review it yourself before using it anywhere.")}catch(e){say("dmsg",e.message,1)}};
-$("reject").onclick=async()=>{try{const r=await api("POST","/approvals",{draftId:did,decision:"reject"});setStatus(r.status);say("dmsg","Rejected. This draft cannot be used.")}catch(e){say("dmsg",e.message,1)}};
-$("export").onclick=async()=>{try{await api("GET","/drafts/"+did+"/export");say("dmsg","Export allowed by the demo gate: this saved version is approved and no rule-detectable unsupported claim was found. Not a fact check; review it yourself.")}catch(e){say("dmsg",e.message,1)}};
+  if(epoch!==draftGeneration||requested!==did||generation!==sourceGeneration)return;did=r.draftId;savedRes=$("dres").value;savedNote=$("dnote").value;setStatus("draft");refresh();say("dmsg","Saved as a new draft. It needs its own approval.");
+}catch(e){if(e instanceof StaleResponse||epoch!==draftGeneration||requested!==did)return;say("dmsg",e.message,1)}};
+$("approve").onclick=async()=>{const epoch=draftGeneration,requested=did;try{const generation=sourceGeneration;const r=await api("POST","/approvals",{draftId:did,decision:"approve"});if(epoch!==draftGeneration||requested!==did||generation!==sourceGeneration)return;setStatus(r.status);say("dmsg","Saved draft approved in this demo. Review it yourself before using it anywhere.")}catch(e){if(e instanceof StaleResponse||epoch!==draftGeneration||requested!==did)return;say("dmsg",e.message,1)}};
+$("reject").onclick=async()=>{const epoch=draftGeneration,requested=did;try{const generation=sourceGeneration;const r=await api("POST","/approvals",{draftId:did,decision:"reject"});if(epoch!==draftGeneration||requested!==did||generation!==sourceGeneration)return;setStatus(r.status);say("dmsg","Rejected. This draft cannot be used.")}catch(e){if(e instanceof StaleResponse||epoch!==draftGeneration||requested!==did)return;say("dmsg",e.message,1)}};
+$("export").onclick=async()=>{const epoch=draftGeneration,requested=did;try{const generation=sourceGeneration;await api("GET","/drafts/"+did+"/export");if(epoch!==draftGeneration||requested!==did||generation!==sourceGeneration)return;say("dmsg","Export allowed by the demo gate: this saved version is approved and no rule-detectable unsupported claim was found. Not a fact check; review it yourself.")}catch(e){if(e instanceof StaleResponse||epoch!==draftGeneration||requested!==did)return;say("dmsg",e.message,1)}};
 const resLink=x=>{const i=x.lastIndexOf(" - http");if(i<0)return esc(x);const u=x.slice(i+3);return /^https:\/\//.test(u)?`<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(x.slice(0,i))}</a>`:esc(x)};
-$("road").onclick=async()=>{try{const r=await api("POST","/roadmap",{resumeId:rid,targetRole:"Data Analyst"});
-  $("roadlist").innerHTML=r.milestones.map(m=>`<li><b>${esc(m.title)}</b> · ${m.etaWeeks} wk<br><small>${esc(m.why)}</small><br><small>${m.resources.map(resLink).join(" · ")}</small></li>`).join("")}catch(e){$("roadlist").innerHTML='<li class="bad">'+esc(e.message)+"</li>"}};
+$("road").onclick=async()=>{try{const generation=sourceGeneration;const r=await api("POST","/roadmap",{resumeId:rid,targetRole:"Data Analyst"});
+  if(generation!==sourceGeneration)return;$("roadlist").innerHTML=r.milestones.map(m=>`<li><b>${esc(m.title)}</b> · ${m.etaWeeks} wk<br><small>${esc(m.why)}</small><br><small>${m.resources.map(resLink).join(" · ")}</small></li>`).join("")}catch(e){if(e instanceof StaleResponse)return;$("roadlist").innerHTML='<li class="bad">'+esc(e.message)+"</li>"}};
 let qs=0;
 function showQ(t){$("iv").innerHTML=`<div class="q">${esc(t)}</div><textarea id="ans" style="min-height:70px"></textarea><button id="send">Answer</button><div id="fb" class="msg"></div>`;$("send").onclick=answer}
 $("start").onclick=async()=>{try{const r=await api("POST","/interview/mock",{targetRole:"Data Analyst"});sid=r.sessionId;showQ(r.firstQuestion);
-  if(r.carriedFromEarlier.length)$("iv").insertAdjacentHTML("afterbegin",'<p class="msg">Carried over from earlier sessions: '+esc(r.carriedFromEarlier.join("; "))+"</p>")}catch(e){$("iv").textContent=e.message}};
+  if(r.carriedFromEarlier.length)$("iv").insertAdjacentHTML("afterbegin",'<p class="msg">Carried over from earlier sessions: '+esc(r.carriedFromEarlier.join("; "))+"</p>")}catch(e){if(e instanceof StaleResponse)return;$("iv").textContent=e.message}};
 async function answer(){try{const r=await api("POST","/interview/"+sid+"/answer",{text:$("ans").value});
   if(r.done){const f=await api("GET","/interview/"+sid+"/feedback");$("iv").innerHTML="<p><b>"+esc(f.summary)+"</b></p>"+(f.weakAreas.length?"<p>Weak areas:</p><ul>"+f.weakAreas.map(w=>"<li>"+esc(w)+"</li>").join("")+"</ul>":"")}
-  else showQ(r.nextQuestion)}catch(e){$("fb").textContent=e.message}}
+  else showQ(r.nextQuestion)}catch(e){if(e instanceof StaleResponse)return;$("fb").textContent=e.message}}
 </script></body></html>

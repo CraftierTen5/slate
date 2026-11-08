@@ -67,3 +67,12 @@ def test_uploaded_pdf_drives_matches(client):
                       files={"file": ("resume.pdf", make_pdf(LINES), "application/pdf")}).json()["resumeId"]
     r = client.get("/v1/jobs", params={"resumeId": rid})
     assert r.status_code == 200 and len(r.json()["jobs"]) > 0
+
+
+def test_pdf_response_preserves_original_source_text_for_current_editor(client):
+    response=client.post('/v1/resume/pdf', files={'file':('synthetic.pdf',make_pdf(LINES),'application/pdf')})
+    assert response.status_code==200
+    data=response.json()
+    assert data['sourceTextKind']=='original_uploaded_text_not_user_addendum'
+    assert data['sourceText']==extract_pdf_text(make_pdf(LINES))
+    assert 'Asha Verma' in data['sourceText']
