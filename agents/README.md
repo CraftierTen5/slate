@@ -51,3 +51,14 @@ are bounded excerpts, not complete document reconstruction; general multi-column
 and qualification normalization remain unfinished. Stored review snapshots and
 metadata survive the existing per-user persistence path, subject to its current
 single-process and privacy limitations. No public sharing is performed.
+
+### Reopen saved versions
+
+Classic UI can load the signed-in user's newest100resume summaries and reopen
+a selected immutable version after reload or restart. Per-user DB state must be
+configured for restart durability; in-memory mode remains ephemeral. Reopening
+shows original uploaded text separately from reviewed self-reported skill data,
+not a fabricated edited PDF. It does not reparse or approve drafts. Source-bound
+job/draft/roadmap results are cleared when switching versions, and stale delayed
+job/draft responses are discarded. This is not full draft/history/account-data
+management or pagination; retention/delete/export policy remains future work.
