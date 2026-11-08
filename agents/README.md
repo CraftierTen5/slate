@@ -107,3 +107,12 @@ regression covers two same-user PDF calls and event-loop progress. This does
 not sandbox pypdf CPU/memory use or add request-body/page caps by itself; see
 separate upload hardening PR29. On combining branches, preserve the synchronous
 `file.file.read(5_000_001)` route and PR29's other upload/decoder limits.
+
+### No URL-triggered mutations
+
+The AI page no longer has `#demo`, `#demo-approve` or `#demo-reject`
+automation. Opening a URL must not parse private text, call a model, or make a
+candidate decision. Use the visible controls deliberately. The optional browser
+script checks all three fragments in an already signed-in context and verifies
+no POST requests occur. This is not general CSRF/XSS protection or proof that
+every decision originated with a human.
