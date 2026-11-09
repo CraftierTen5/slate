@@ -1,4 +1,4 @@
-"""Optional Gemini-powered interview coach. Falls back cleanly when no key/SDK is available."""
+"""Gemini-powered interview coach. Falls back cleanly when no key/SDK is available."""
 import json
 import os
 
