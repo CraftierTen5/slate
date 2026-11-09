@@ -155,10 +155,37 @@ class InterviewStore:
                 "aiPowered": ai_powered,
                 "coachMode": "gemini" if ai_powered else "deterministic_fallback"}
 
+    def _upgrade_legacy_session(self, session):
+        """Upgrade sessions persisted by the pre-adaptive interview store in place."""
+        if "current_question" in session:
+            return
+        questions = list(session.get("questions", []))
+        answers = list(session.get("answers", []))
+        reviews, transcript = [], []
+        for question, answer in zip(questions, answers):
+            review = self._fallback_review(answer)
+            topic = question.split(":")[0].replace("Last time this was weak", "").strip()
+            review["topic"] = topic or question[:120]
+            review["question"] = question
+            review["isFollowUp"] = False
+            reviews.append(review)
+            transcript.append({"question": question, "answer": answer, "isFollowUp": False})
+        session.update({
+            "fallback_questions": questions,
+            "main_index": len(answers),
+            "max_main_questions": len(questions),
+            "current_question": questions[len(answers)] if len(answers) < len(questions) else None,
+            "followup_used": False, "transcript": transcript, "reviews": reviews,
+            "resume_context": {}, "mode": "text", "ai_powered": False,
+            "model_turns": 0, "fallback_turns": len(answers),
+            "done": len(answers) >= len(questions),
+        })
+
     def answer(self, sid: str, text: str) -> dict:
         s = self._sessions.get(sid)
         if s is None:
             raise KeyError("session_not_found")
+        self._upgrade_legacy_session(s)
         if not isinstance(text, str) or not text.strip():
             raise ValueError("answer_empty")
         if s.get("done"):
@@ -228,6 +255,7 @@ class InterviewStore:
         s = self._sessions.get(sid)
         if s is None:
             raise KeyError("session_not_found")
+        self._upgrade_legacy_session(s)
         reviews = s.get("reviews", [])
         weak = []
         strengths, improvements = [], []
