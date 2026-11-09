@@ -201,7 +201,7 @@ $("submit").onclick=async()=>{
 async function finish(){
  stopDevices();
  const fb=await api("/interview/"+sid+"/feedback");$("session").classList.add("hidden");$("results").classList.remove("hidden");
- $("summary").innerHTML='<p><b>'+esc(fb.summary)+'</b></p><p>Average score: <b>'+esc(fb.averageScore)+'/5</b> · Coach: '+esc(fb.coachMode)+'</p>';
+ $("summary").innerHTML='<p><b>'+esc(fb.summary)+'</b></p><p>Content score: <b>'+esc(fb.averageScore)+'/5</b>'+(fb.averageDeliveryScore!==null&&fb.averageDeliveryScore!==undefined?' · Voice delivery: <b>'+esc(fb.averageDeliveryScore)+'/5</b>':'')+' · Coach: '+esc(fb.coachMode)+'</p>';
  const reviews=fb.answerReviews||[];$("details").innerHTML=reviews.map((r,i)=>'<div class="review"><b>'+esc(r.isFollowUp?"Follow-up":"Answer "+(i+1))+' · '+esc(r.score)+'/5</b><p>'+esc(r.question)+'</p><p>'+esc(r.feedback)+'</p>'+(r.strengths.length?'<p><b>Strengths:</b> '+esc(r.strengths.join("; "))+'</p>':"")+(r.improvements.length?'<p><b>Improve:</b> '+esc(r.improvements.join("; "))+'</p>':"")+(r.deliveryScore?'<p><b>Voice delivery: '+esc(r.deliveryScore)+'/5</b> · '+esc(r.deliveryFeedback)+'</p>':"")+(r.deliveryImprovements?.length?'<p><b>Delivery suggestions:</b> '+esc(r.deliveryImprovements.join("; "))+'</p>':"")+'</div>').join("")+(fb.weakAreas.length?'<h3>Weak areas to revisit</h3><ul>'+fb.weakAreas.map(x=>"<li>"+esc(x)+"</li>").join("")+"</ul>":"")+(fb.strengths.length?'<h3>Strengths</h3><ul>'+fb.strengths.map(x=>"<li>"+esc(x)+"</li>").join("")+"</ul>":"")+(fb.improvements.length?'<h3>Recommended improvements</h3><ul>'+fb.improvements.map(x=>"<li>"+esc(x)+"</li>").join("")+"</ul>":"");
 }
 $("endInterview").onclick=async()=>{
