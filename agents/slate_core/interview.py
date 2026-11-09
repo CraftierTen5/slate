@@ -376,7 +376,9 @@ class InterviewStore:
             except Exception:
                 review = None
         if review is None:
-            review = self._fallback_review(answer)
+            review = self._fallback_review(
+                s["role"], question, answer,
+                allow_followup=(s.get("followup_count", 0) == 0))
             if metrics:
                 wpm = float(metrics.get("wordsPerMinute", 0) or 0)
                 pause_ratio = float(metrics.get("pauseRatio", 0) or 0)
