@@ -211,7 +211,7 @@ class SlateService:
             raise SlateError("role_unknown", "Enter a target role before starting the interview.")
         context = self._interview_resume_context(resume_id)
         return self.interviews.start(target_role.strip()[:120],
-                                     self.interviews.past_feedback(),
+                                     self.interviews.past_feedback(target_role),
                                      resume_context=context, mode=mode)
 
     def _answer_interview(self, session_id, text, delivery_metrics=None) -> dict:
