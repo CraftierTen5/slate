@@ -233,41 +233,57 @@ class InterviewStore:
 
     @staticmethod
     def _fallback_review(role, question, answer, allow_followup=True):
-        """Transparent offline review with role-aware prompts and actionable coaching."""
+        """Transparent offline review with role-aware relevance checks and actionable coaching."""
         words = len(answer.split())
         low_q, low_a = question.lower(), answer.lower()
         score = 1 if words < 12 else 2 if words < 25 else 3 if words < 55 else 4
         is_hr = any(term in str(role).lower() for term in ("human", "hr", "people", "personnel"))
+        relevant_terms = []
         if is_hr:
             if any(term in low_q for term in ("confidential", "sensitive", "complaint", "unfair treatment")):
                 focus = "Explain how you would listen without promising absolute secrecy, record facts objectively, limit access to the information, and escalate under the organisation's process."
                 probe = "You mentioned handling the concern. What would you tell the employee about confidentiality, and who would need to be involved if the allegation required formal action?"
+                relevant_terms = ["confidential", "private", "share", "disclose", "document", "record", "escalate", "policy", "facts", "investigate", "employee"]
             elif any(term in low_q for term in ("hiring", "recruit", "candidate", "vacancy", "interview")):
                 focus = "Name the job-related selection criteria, how you would align the hiring manager, and how you would keep candidate evaluation consistent."
                 probe = "What specific criteria would you agree with the hiring manager, and how would you make sure every candidate is assessed against the same standard?"
+                relevant_terms = ["criteria", "requirement", "candidate", "manager", "role", "selection", "interview", "assess", "fair", "consistent", "document"]
             elif any(term in low_q for term in ("conflict", "disagreement", "upset", "manager", "employee")):
                 focus = "Describe how you would hear each perspective separately, check facts rather than take sides, agree next steps, and follow up."
                 probe = "What would you do if the two people gave you conflicting accounts, and how would you decide what to do next?"
+                relevant_terms = ["listen", "both", "each", "perspective", "facts", "neutral", "manager", "employee", "mediate", "resolve", "follow up"]
             elif any(term in low_q for term in ("onboarding", "new hire")):
                 focus = "Set out the immediate support you would provide, who owns each onboarding task, and how you would check the new hire is settling in."
                 probe = "How would you check after the first week that the new hire understands their responsibilities and has the support they need?"
+                relevant_terms = ["onboarding", "orientation", "training", "manager", "check in", "expectations", "responsibilities", "support", "feedback"]
             else:
                 focus = "Explain the first action you would take, the policy or evidence you would consult, who you would involve, and how you would follow up."
                 probe = "What would be your first practical step, and what information would you need before deciding how to proceed?"
+                relevant_terms = ["policy", "process", "document", "evidence", "employee", "manager", "fair", "consistent", "escalate", "follow up"]
         else:
             focus = "Connect your approach to the role: explain the steps you took, the reason for choosing them, and the evidence or outcome you used to judge success."
             probe = "What was the most important decision you made, and what evidence showed whether it worked?"
+        matched = [term for term in relevant_terms if term in low_a]
+        if is_hr and len(matched) < 2:
+            score = min(score, 2)
+        elif is_hr and len(matched) >= 4 and words >= 35:
+            score = max(score, 4)
         if words < 25:
             feedback = "There is not yet enough detail to assess your judgement. The answer needs a clearer sequence of actions and a reason for those actions."
             improvements = [focus, "Add one specific example or realistic step-by-step scenario rather than describing your approach in general terms."]
+        elif is_hr and len(matched) < 2:
+            feedback = "Your answer is detailed enough to follow, but it does not yet demonstrate enough of the HR judgement this question is testing."
+            improvements = [focus]
         elif words < 55:
             feedback = "You have started to address the question, but the answer needs more role-specific reasoning and a clearer explanation of how you would handle the situation."
             improvements = [focus]
         else:
             feedback = "The answer has enough detail for an initial review. Strengthen it by making the decision process and follow-through explicit."
             improvements = [focus]
+        strengths = (["Your answer mentions relevant HR considerations: " + ", ".join(matched[:4]) + "."]
+                    if is_hr and len(matched) >= 3 else [])
         followup = probe if allow_followup and words < 85 else None
-        return {"score": score, "feedback": feedback, "strengths": [],
+        return {"score": score, "feedback": feedback, "strengths": strengths,
                 "improvements": improvements, "follow_up_question": followup,
                 "next_question": None, "topic": str(question)[:120]}
 
