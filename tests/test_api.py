@@ -96,3 +96,21 @@ def test_direct_interview_page_is_served(c):
     assert response.status_code == 200
     assert "Slate" in response.text
     assert "Start interview" in response.text
+
+
+def test_interview_only_ends_when_end_endpoint_is_called(c):
+    started = c.post("/v1/interview/mock", json={"targetRole": "Data Analyst"}).json()
+    sid = started["sessionId"]
+    for _ in range(8):
+        answer = c.post(f"/v1/interview/{sid}/answer", json={
+            "text": "I would inspect the data, validate assumptions, and communicate the result.",
+            "deliveryMetrics": {"wordsPerMinute": 130, "pauseRatio": 0.2, "fillerCount": 1}
+        })
+        assert answer.status_code == 200
+        assert answer.json()["done"] is False
+    feedback = c.post(f"/v1/interview/{sid}/end")
+    assert feedback.status_code == 200
+    assert feedback.json()["ended"] is True
+    assert feedback.json()["answeredCount"] == 8
+    after_end = c.post(f"/v1/interview/{sid}/answer", json={"text": "late answer"})
+    assert after_end.status_code == 409
