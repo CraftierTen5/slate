@@ -181,16 +181,40 @@ class SlateService:
             raise SlateError("role_unknown", "No sample listings for that role yet.")
         return {"milestones": ms}
 
-    def _start_interview(self, target_role, mode="text") -> dict:
-        if mode != "text":
-            raise SlateError("mode_unsupported", "Only text mode in the MVP.")
-        return self.interviews.start(target_role, self.interviews.past_feedback())
+    def _interview_resume_context(self, resume_id):
+        if not resume_id:
+            return {}
+        parsed = self._resume(resume_id)
+        # Use bounded structured resume facts only; never send arbitrary source text.
+        return {
+            "name": parsed.get("name", ""),
+            "skills": parsed.get("skills", [])[:80],
+            "education": parsed.get("education", [])[:12],
+            "experience": parsed.get("experience", [])[:20],
+            "sectionReview": parsed.get("sectionReview", {}),
+        }
+
+    def _start_interview(self, target_role, mode="text", resume_id=None) -> dict:
+        if mode not in ("text", "voice"):
+            raise SlateError("mode_unsupported", "Interview mode must be 'text' or 'voice'.")
+        if not isinstance(target_role, str) or not target_role.strip():
+            raise SlateError("role_unknown", "Enter a target role before starting the interview.")
+        context = self._interview_resume_context(resume_id)
+        return self.interviews.start(target_role.strip()[:120],
+                                     self.interviews.past_feedback(),
+                                     resume_context=context, mode=mode)
 
     def _answer_interview(self, session_id, text) -> dict:
         try:
             return self.interviews.answer(session_id, text)
         except KeyError:
             raise SlateError("session_not_found", "No interview session with that id.")
+        except ValueError as e:
+            if str(e) == "answer_empty":
+                raise SlateError("answer_empty", "Enter or dictate an answer before submitting.")
+            if str(e) == "interview_complete":
+                raise SlateError("interview_complete", "This interview is already complete.")
+            raise
 
     def _interview_feedback(self, session_id) -> dict:
         try:
