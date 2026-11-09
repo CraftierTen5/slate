@@ -73,6 +73,7 @@ class MockIn(BaseModel):
 
 class AnswerIn(BaseModel):
     text: str = Field(min_length=1, max_length=20_000)
+    deliveryMetrics: Optional[dict] = None
 
 class ApprovalIn(BaseModel):
     draftId: str
@@ -155,7 +156,12 @@ def _mount(r: APIRouter, get_svc):
 
     @r.post("/interview/{sid}/answer")
     def answer(request: Request, sid: str, b: AnswerIn):
-        with get_svc(request) as svc: return svc.answer_interview(sid, b.text)
+        with get_svc(request) as svc:
+            return svc.answer_interview(sid, b.text, b.deliveryMetrics)
+
+    @r.post("/interview/{sid}/end")
+    def end_interview(request: Request, sid: str):
+        with get_svc(request) as svc: return svc.end_interview(sid)
 
     @r.get("/interview/{sid}/feedback")
     def feedback(request: Request, sid: str):
