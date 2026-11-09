@@ -209,9 +209,15 @@ class InterviewStore:
         review = None
         if self.coach is not None:
             try:
-                review = self.coach.evaluate_answer(
-                    s["role"], question, answer, s["resume_context"],
-                    s["transcript"], s.get("followup_count", 0) > 0, metrics)
+                try:
+                    review = self.coach.evaluate_answer(
+                        s["role"], question, answer, s["resume_context"],
+                        s["transcript"], s.get("followup_count", 0) > 0, metrics)
+                except TypeError:
+                    # Backward compatibility for injected coaches using the old interface.
+                    review = self.coach.evaluate_answer(
+                        s["role"], question, answer, s["resume_context"],
+                        s["transcript"], s.get("followup_count", 0) > 0)
                 if not isinstance(review, dict):
                     review = None
             except Exception:
