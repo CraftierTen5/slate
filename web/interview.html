@@ -16,6 +16,11 @@ button.secondary{background:white;color:#14213d;border:1px solid #14213d}button:
 .question{font-size:19px;line-height:1.5;background:#f2f5fb;border-radius:10px;padding:18px;margin:12px 0}
 .pill{display:inline-block;border-radius:20px;background:#edf2ff;color:#2457c5;padding:4px 10px;font-size:13px}
 .hidden{display:none!important}.review{border-top:1px solid #e5e9f0;padding:12px 0}.score{font-weight:700;color:#2457c5}
+.camera-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:start}
+video{width:100%;max-height:280px;object-fit:cover;background:#101828;border-radius:10px;transform:scaleX(-1)}
+.camera-note{font-size:13px;color:#5b6678}
+button.danger{background:#a4262c}
+@media(max-width:650px){.camera-grid{grid-template-columns:1fr}}
 @media(max-width:650px){.row{grid-template-columns:1fr}.wrap{padding:18px 12px}}
 </style></head>
 <body><main class="wrap">
@@ -33,8 +38,16 @@ button.secondary{background:white;color:#14213d;border:1px solid #14213d}button:
 <div class="row"><div><span class="pill" id="progress">Question 1</span></div><div style="text-align:right"><span class="pill" id="coachMode">Coach</span></div></div>
 <div class="question" id="question"></div>
 <div id="liveReview" class="status muted"></div>
+<div class="camera-grid">
+ <div><b>Camera</b><video id="cameraPreview" autoplay muted playsinline></video>
+  <button id="cameraToggle" class="secondary">Enable camera</button><div id="cameraStatus" class="camera-note">Camera is off. Enable it if you want a self-preview.</div>
+ </div>
+ <div><b>Delivery assessment</b><div class="camera-note">In voice mode, Slate records each answer locally to measure speaking pace, pauses, filler words and volume variation. Raw audio is not uploaded or retained.</div>
+  <div id="audioStatus" class="camera-note">Microphone capture starts with each voice answer.</div>
+ </div>
+</div>
 <label for="answer">Your answer</label><textarea id="answer" placeholder="Structure your answer clearly. Include your reasoning and a concrete example where relevant."></textarea>
-<div><button id="mic" class="secondary">Start dictation</button><button id="stopMic" class="secondary" disabled>Stop dictation</button><button id="submit">Submit answer</button></div>
+<div><button id="mic" class="secondary">Start dictation</button><button id="stopMic" class="secondary" disabled>Stop dictation</button><button id="submit">Submit answer</button><button id="endInterview" class="danger">End interview</button></div>
 <div id="sessionStatus" class="status"></div>
 </section>
 <section class="panel hidden" id="results"><h2>Interview feedback</h2><div id="summary"></div><div id="details"></div><button id="again">Start another interview</button></section>
@@ -42,6 +55,7 @@ button.secondary{background:white;color:#14213d;border:1px solid #14213d}button:
 <script>
 const $=id=>document.getElementById(id);
 let sid=null, token=()=>sessionStorage.getItem("slate_token")||"", recognition=null, listening=false, answerPrefix="";
+let cameraStream=null,audioStream=null,recorder=null,audioChunks=[],cameraOn=false;
 function esc(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 function msg(id,text,error=false){$(id).textContent=text;$(id).className="status "+(error?"error":"")}
 async function api(path,method="GET",body){
@@ -77,10 +91,58 @@ $("start").onclick=async()=>{
   sid=data.sessionId;$("setup").classList.add("hidden");$("session").classList.remove("hidden");$("results").classList.add("hidden");
   $("question").textContent=data.firstQuestion;$("coachMode").textContent=data.coachMode==="gemini"?"Gemini adaptive coach":"Fallback coach";
   $("progress").textContent="Question 1";$("answer").value="";msg("sessionStatus",data.carriedFromEarlier.length?"Prior weak areas included: "+data.carriedFromEarlier.join(", "):"Interview started.");
-  if($("mode").value==="voice") speak(data.firstQuestion);
+  if($("mode").value==="voice"){ speak(data.firstQuestion); await prepareAudio(); beginAnswerCapture(); }
  }catch(e){msg("setupStatus",e.message,true)}finally{$("start").disabled=false}
 };
 function speak(text){if(!("speechSynthesis" in window))return;window.speechSynthesis.cancel();window.speechSynthesis.speak(new SpeechSynthesisUtterance(text))}
+async function prepareAudio(){
+ try{audioStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:false}});$("audioStatus").textContent="Microphone ready. Audio is processed locally for delivery metrics."}
+ catch(e){audioStream=null;$("audioStatus").textContent="Microphone unavailable. You can still answer by typing; delivery scoring will be unavailable."}
+}
+function beginAnswerCapture(){
+ if(!audioStream||!window.MediaRecorder)return;
+ try{audioChunks=[];recorder=new MediaRecorder(audioStream);recorder.ondataavailable=e=>{if(e.data&&e.data.size)audioChunks.push(e.data)};recorder.start();$("audioStatus").textContent="Recording this answer locally…"}
+ catch(e){recorder=null;$("audioStatus").textContent="Audio recording unavailable; transcript-only evaluation will be used."}
+}
+function stopAnswerCapture(){
+ return new Promise(resolve=>{
+  if(!recorder||recorder.state==="inactive"){resolve(null);return}
+  const active=recorder;active.onstop=()=>resolve(new Blob(audioChunks,{type:active.mimeType||"audio/webm"}));active.stop();
+ });
+}
+async function measureDelivery(blob,transcript){
+ if(!blob||!blob.size)return null;
+ try{
+  const bytes=await blob.arrayBuffer(),ctx=new (window.AudioContext||window.webkitAudioContext)();
+  const decoded=await ctx.decodeAudioData(bytes),samples=decoded.getChannelData(0),sr=decoded.sampleRate;
+  const frame=Math.max(1,Math.floor(sr*.05)),levels=[];
+  for(let i=0;i<samples.length;i+=frame){let sum=0,n=Math.min(frame,samples.length-i);for(let j=0;j<n;j++)sum+=samples[i+j]*samples[i+j];levels.push(Math.sqrt(sum/n))}
+  await ctx.close();
+  const peak=Math.max(...levels,0.00001),threshold=Math.max(.008,peak*.12);
+  let silent=0,pauses=0,inPause=false,run=0,activeLevels=[];
+  for(const v of levels){if(v<threshold){silent++;run++;if(run>=5&&!inPause){pauses++;inPause=true}}else{run=0;inPause=false;activeLevels.push(v)}}
+  const duration=decoded.duration,words=(transcript.trim().match(/\b[\w'-]+\b/g)||[]).length;
+  const mean=activeLevels.reduce((a,b)=>a+b,0)/Math.max(1,activeLevels.length);
+  const variance=activeLevels.reduce((a,b)=>a+(b-mean)**2,0)/Math.max(1,activeLevels.length);
+  const fillers=(transcript.toLowerCase().match(/\b(um|uh|erm| like |you know|basically|actually)\b/g)||[]).length;
+  return {durationSeconds:+duration.toFixed(1),wordsPerMinute:Math.round(words/Math.max(duration,1)*60),
+   pauseRatio:+(silent/Math.max(1,levels.length)).toFixed(2),pauseCount:pauses,
+   fillerCount:fillers,meanVolume:+mean.toFixed(4),volumeVariation:+Math.sqrt(variance).toFixed(4)};
+ }catch(e){return null}
+}
+async function toggleCamera(){
+ if(cameraStream){cameraStream.getTracks().forEach(t=>t.stop());cameraStream=null;$("cameraPreview").srcObject=null;cameraOn=false;$("cameraToggle").textContent="Enable camera";$("cameraStatus").textContent="Camera is off.";return}
+ try{cameraStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user"},audio:false});$("cameraPreview").srcObject=cameraStream;cameraOn=true;$("cameraToggle").textContent="Turn camera off";$("cameraStatus").textContent="Camera preview is active on this device only. No video is uploaded or recorded."}
+ catch(e){msg("cameraStatus","Camera permission denied or unavailable. You can continue without it.",true)}
+}
+function stopDevices(){
+ if(recognition&&listening)recognition.stop();
+ if(audioStream)audioStream.getTracks().forEach(t=>t.stop());
+ if(cameraStream)cameraStream.getTracks().forEach(t=>t.stop());
+ audioStream=null;cameraStream=null;$("cameraPreview").srcObject=null;
+ if("speechSynthesis" in window)window.speechSynthesis.cancel();
+}
+$("cameraToggle").onclick=toggleCamera;
 function makeRecognition(){
  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR)return null;
  const r=new SR();r.lang="en-IN";r.interimResults=true;r.continuous=true;
@@ -102,18 +164,25 @@ $("submit").onclick=async()=>{
   $("submit").disabled=true;if(listening&&recognition)recognition.stop();
   const text=$("answer").value.trim();if(!text)throw new Error("Enter or dictate an answer first.");
   msg("sessionStatus","Evaluating your answer…");
-  const result=await api("/interview/"+sid+"/answer","POST",{text});
+  const audioBlob=await stopAnswerCapture();
+  const deliveryMetrics=$("mode").value==="voice"?await measureDelivery(audioBlob,text):null;
+  const result=await api("/interview/"+sid+"/answer","POST",{text,deliveryMetrics});
   if(result.evaluation){const e=result.evaluation;$("liveReview").innerHTML='<b>Score: '+e.score+'/5</b> · '+esc(e.feedback)+'<br>'+(e.improvements.length?"Improve: "+esc(e.improvements.join("; ")):"");}
-  if(result.done){await finish();return}
-  $("question").textContent=result.nextQuestion;$("answer").value="";$("progress").textContent="Next question";msg("sessionStatus",result.isFollowUp?"Follow-up question.":"Next main question.");
-  if($("mode").value==="voice")speak(result.nextQuestion);
+  $("question").textContent=result.nextQuestion;$("answer").value="";$("progress").textContent="Question "+(Number($("progress").dataset.count||1)+1);$("progress").dataset.count=String(Number($("progress").dataset.count||1)+1);msg("sessionStatus",result.isFollowUp?"Follow-up probe.":"Moving to the next interview topic.");
+  if(result.evaluation?.deliveryScore){$("liveReview").innerHTML+='<br><b>Delivery: '+esc(result.evaluation.deliveryScore)+'/5</b> · '+esc(result.evaluation.deliveryFeedback)}
+  if($("mode").value==="voice"){speak(result.nextQuestion);beginAnswerCapture()}
  }catch(e){msg("sessionStatus",e.message,true)}finally{$("submit").disabled=false}
 };
 async function finish(){
+ stopDevices();
  const fb=await api("/interview/"+sid+"/feedback");$("session").classList.add("hidden");$("results").classList.remove("hidden");
  $("summary").innerHTML='<p><b>'+esc(fb.summary)+'</b></p><p>Average score: <b>'+esc(fb.averageScore)+'/5</b> · Coach: '+esc(fb.coachMode)+'</p>';
  const reviews=fb.answerReviews||[];$("details").innerHTML=reviews.map((r,i)=>'<div class="review"><b>'+esc(r.isFollowUp?"Follow-up":"Answer "+(i+1))+' · '+esc(r.score)+'/5</b><p>'+esc(r.question)+'</p><p>'+esc(r.feedback)+'</p>'+(r.strengths.length?'<p><b>Strengths:</b> '+esc(r.strengths.join("; "))+'</p>':"")+(r.improvements.length?'<p><b>Improve:</b> '+esc(r.improvements.join("; "))+'</p>':"")+'</div>').join("")+(fb.weakAreas.length?'<h3>Weak areas to revisit</h3><ul>'+fb.weakAreas.map(x=>"<li>"+esc(x)+"</li>").join("")+"</ul>":"")+(fb.strengths.length?'<h3>Strengths</h3><ul>'+fb.strengths.map(x=>"<li>"+esc(x)+"</li>").join("")+"</ul>":"")+(fb.improvements.length?'<h3>Recommended improvements</h3><ul>'+fb.improvements.map(x=>"<li>"+esc(x)+"</li>").join("")+"</ul>":"");
 }
-$("again").onclick=()=>{sid=null;$("results").classList.add("hidden");$("setup").classList.remove("hidden");$("liveReview").textContent=""};
+$("endInterview").onclick=async()=>{
+ try{$("endInterview").disabled=true;msg("sessionStatus","Ending interview and preparing your report…");await stopAnswerCapture();await api("/interview/"+sid+"/end","POST",{});await finish()}
+ catch(e){msg("sessionStatus",e.message,true);$("endInterview").disabled=false}
+};
+$("again").onclick=()=>{sid=null;$("results").classList.add("hidden");$("setup").classList.remove("hidden");$("liveReview").textContent="";$("progress").dataset.count="1";$("endInterview").disabled=false};
 initAuth();
 </script></body></html>
