@@ -185,15 +185,25 @@ class SlateService:
         if not resume_id:
             return {}
         parsed = self._resume(resume_id)
-        # Use bounded structured resume facts only; never send arbitrary source text.
+        # Send only bounded structured facts, never the original resume text.
+        education = [
+            {"degree": str(item.get("degree", ""))[:120],
+             "institute": str(item.get("institute", ""))[:160],
+             "year": item.get("year")}
+            for item in parsed.get("education", []) if isinstance(item, dict)
+        ][:12]
+        experience = [
+            {"title": str(item.get("title", ""))[:120],
+             "org": str(item.get("org", ""))[:160],
+             "months": item.get("months")}
+            for item in parsed.get("experience", []) if isinstance(item, dict)
+        ][:20]
         return {
-            "name": parsed.get("name", ""),
-            "skills": parsed.get("skills", [])[:80],
-            "education": parsed.get("education", [])[:12],
-            "experience": parsed.get("experience", [])[:20],
-            "sectionReview": parsed.get("sectionReview", {}),
+            "name": str(parsed.get("name", ""))[:120],
+            "skills": [str(skill)[:80] for skill in parsed.get("skills", [])[:80]],
+            "education": education,
+            "experience": experience,
         }
-
     def _start_interview(self, target_role, mode="text", resume_id=None) -> dict:
         if mode not in ("text", "voice"):
             raise SlateError("mode_unsupported", "Interview mode must be 'text' or 'voice'.")
