@@ -17,3 +17,11 @@ def test_roadmap_resources_remain_https_links():
 def test_auth_still_covers_json_and_pdf_requests():
     assert 'h["authorization"]="Bearer "+token()' in HTML
     assert 'ph["authorization"]="Bearer "+token()' in HTML
+
+def test_dedicated_interview_page_has_voice_and_resume_controls():
+    page=(Path(__file__).resolve().parents[1]/"web"/"interview.html").read_text()
+    assert 'fetch("/v1"+path' in page
+    assert 'mode:$("mode").value' in page
+    assert 'resumeId:$("resume").value||null' in page
+    assert 'SpeechRecognition||window.webkitSpeechRecognition' in page
+    assert 'answerReviews' in page or 'fb.answerReviews' in page
