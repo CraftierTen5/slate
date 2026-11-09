@@ -244,56 +244,75 @@ class InterviewStore:
 
     @staticmethod
     def _fallback_review(role, question, answer, allow_followup=True):
-        """Transparent offline review with role-aware relevance checks and actionable coaching."""
-        words = len(answer.split())
-        low_q, low_a = question.lower(), answer.lower()
-        score = 1 if words < 12 else 2 if words < 25 else 3 if words < 55 else 4
+        """Conservative offline rubric: relevance and evidence matter more than length."""
+        words = re.findall(r"[a-z0-9]+", str(answer or "").lower())
+        low_q, low_a = str(question or "").lower(), str(answer or "").lower()
+        stop = {"what", "how", "why", "when", "where", "which", "who", "would", "could",
+                "should", "your", "you", "the", "and", "for", "with", "from", "that",
+                "this", "have", "had", "was", "were", "are", "been", "being", "tell",
+                "describe", "about", "time", "think", "most", "important", "part"}
+        q_terms = {w for w in re.findall(r"[a-z0-9]+", low_q) if len(w) > 2 and w not in stop}
+        a_terms = set(words)
+        matched = sorted(q_terms & a_terms)
+        action_terms = {"built", "analysed", "analyzed", "tested", "checked", "measured",
+                        "compared", "decided", "implemented", "investigated", "validated",
+                        "created", "designed", "prioritised", "prioritized", "resolved",
+                        "documented", "reviewed", "used", "identified", "presented",
+                        "reduced", "improved", "increased", "delivered", "chose"}
+        evidence_terms = {"result", "results", "because", "therefore", "reduced", "increased",
+                          "improved", "accuracy", "precision", "recall", "percent", "users",
+                          "minutes", "hours", "days", "revenue", "cost", "feedback", "metric",
+                          "measured", "from", "to"}
+        has_action = bool(a_terms & action_terms)
+        has_evidence = bool(a_terms & evidence_terms) or bool(re.search(r"\b\d+(?:\.\d+)?%?\b", low_a))
         is_hr = any(term in str(role).lower() for term in ("human", "hr", "people", "personnel"))
-        relevant_terms = []
         if is_hr:
             if any(term in low_q for term in ("confidential", "sensitive", "complaint", "unfair treatment")):
-                focus = "Explain how you would listen without promising absolute secrecy, record facts objectively, limit access to the information, and escalate under the organisation's process."
-                probe = "You mentioned handling the concern. What would you tell the employee about confidentiality, and who would need to be involved if the allegation required formal action?"
-                relevant_terms = ["confidential", "private", "share", "disclose", "document", "record", "escalate", "policy", "facts", "investigate", "employee"]
+                focus = "Address confidentiality limits, objective fact-finding, restricted information sharing, documentation and appropriate escalation."
+                probe = "What would you tell the employee about confidentiality, and what would make you escalate the concern?"
             elif any(term in low_q for term in ("hiring", "recruit", "candidate", "vacancy", "interview")):
-                focus = "Name the job-related selection criteria, how you would align the hiring manager, and how you would keep candidate evaluation consistent."
-                probe = "What specific criteria would you agree with the hiring manager, and how would you make sure every candidate is assessed against the same standard?"
-                relevant_terms = ["criteria", "requirement", "candidate", "manager", "role", "selection", "interview", "assess", "fair", "consistent", "document"]
-            elif any(term in low_q for term in ("conflict", "disagreement", "upset", "manager", "employee")):
-                focus = "Describe how you would hear each perspective separately, check facts rather than take sides, agree next steps, and follow up."
-                probe = "What would you do if the two people gave you conflicting accounts, and how would you decide what to do next?"
-                relevant_terms = ["listen", "both", "each", "perspective", "facts", "neutral", "manager", "employee", "mediate", "resolve", "follow up"]
-            elif any(term in low_q for term in ("onboarding", "new hire")):
-                focus = "Set out the immediate support you would provide, who owns each onboarding task, and how you would check the new hire is settling in."
-                probe = "How would you check after the first week that the new hire understands their responsibilities and has the support they need?"
-                relevant_terms = ["onboarding", "orientation", "training", "manager", "check in", "expectations", "responsibilities", "support", "feedback"]
+                focus = "Specify job-related selection criteria, agreement with the hiring manager, structured evaluation and consistent documentation."
+                probe = "Which two selection criteria would you make mandatory, and how would you score each candidate consistently?"
             else:
-                focus = "Explain the first action you would take, the policy or evidence you would consult, who you would involve, and how you would follow up."
-                probe = "What would be your first practical step, and what information would you need before deciding how to proceed?"
-                relevant_terms = ["policy", "process", "document", "evidence", "employee", "manager", "fair", "consistent", "escalate", "follow up"]
+                focus = "Identify the relevant HR policy, the people you would consult, the facts you would document and the follow-up you would own."
+                probe = "What policy or evidence would guide your next step, and who would you involve?"
         else:
-            focus = "Connect your approach to the role: explain the steps you took, the reason for choosing them, and the evidence or outcome you used to judge success."
-            probe = "What was the most important decision you made, and what evidence showed whether it worked?"
-        matched = [term for term in relevant_terms if term in low_a]
-        if is_hr and len(matched) < 2:
-            score = min(score, 2)
-        elif is_hr and len(matched) >= 4 and words >= 35:
-            score = max(score, 4)
-        if words < 25:
-            feedback = "There is not yet enough detail to assess your judgement. The answer needs a clearer sequence of actions and a reason for those actions."
-            improvements = [focus, "Add one specific example or realistic step-by-step scenario rather than describing your approach in general terms."]
-        elif is_hr and len(matched) < 2:
-            feedback = "Your answer is detailed enough to follow, but it does not yet demonstrate enough of the HR judgement this question is testing."
+            focus = "State the role-specific method or decision, explain why you chose it, and give evidence (a metric, comparison, test result or concrete outcome) that supports the result."
+            probe = "Which specific step or decision in your answer had the greatest effect, and what evidence supports that?"
+        # No answer earns a high score just for being long. Fallback cannot award 5/5.
+        if len(words) < 8 or not matched:
+            score = 1
+            feedback = ("The answer is too short to assess." if len(words) < 8 else
+                        "The answer does not clearly address the key subject of the question.")
             improvements = [focus]
-        elif words < 55:
-            feedback = "You have started to address the question, but the answer needs more role-specific reasoning and a clearer explanation of how you would handle the situation."
+        elif len(words) < 22:
+            score = 2
+            feedback = "The answer touches the question but provides too little detail to demonstrate a sound approach."
             improvements = [focus]
+        elif not has_action:
+            score = 2
+            feedback = "The answer mentions the topic but does not identify a concrete action or decision you took."
+            improvements = ["Describe the specific action you took and why it was appropriate.", focus]
+        elif not has_evidence:
+            score = 3
+            feedback = "The answer identifies an action, but gives no clear evidence or outcome to show whether it worked."
+            improvements = ["Add a verifiable outcome, metric, comparison or feedback that demonstrates the result.", focus]
+        elif len(words) < 45:
+            score = 3
+            feedback = "The answer includes a relevant action and some evidence, but the reasoning or result needs more detail."
+            improvements = ["Explain the trade-off behind your decision and make the outcome more specific.", focus]
         else:
-            feedback = "The answer has enough detail for an initial review. Strengthen it by making the decision process and follow-through explicit."
-            improvements = [focus]
-        strengths = (["Your answer mentions relevant HR considerations: " + ", ".join(matched[:4]) + "."]
-                    if is_hr and len(matched) >= 3 else [])
-        followup = probe if allow_followup and words < 85 else None
+            score = 4
+            feedback = "The answer is relevant and includes an action and supporting evidence. The reasoning and impact could still be examined more deeply."
+            improvements = ["Clarify the trade-off you considered and what you would improve next time."]
+        strengths = []
+        if matched:
+            strengths.append("Addressed question terms: " + ", ".join(matched[:4]) + ".")
+        if has_action:
+            strengths.append("Identified at least one concrete action.")
+        if has_evidence:
+            strengths.append("Included an outcome or evidence signal.")
+        followup = probe if allow_followup and len(words) < 85 else None
         return {"score": score, "feedback": feedback, "strengths": strengths,
                 "improvements": improvements, "follow_up_question": followup,
                 "next_question": None, "topic": str(question)[:120]}
@@ -308,12 +327,14 @@ class InterviewStore:
             qs.insert(0, f"Last time this was weak: {w}. Try again.")
         first = qs[0]
         ai_powered = False
+        coach_error = (None if self.coach is not None else
+                       "Gemini is not configured for interview coaching. Set GEMINI_API_KEY in the repository-root .env and restart the server.")
         if self.coach is not None:
             try:
                 first = self.coach.first_question(target_role, resume_context, carried)
                 ai_powered = True
-            except Exception:
-                pass
+            except Exception as exc:
+                coach_error = str(exc)[:500]
         self._sessions[sid] = {
             "role": target_role, "mode": mode, "questions": [first],
             "fallback_questions": qs, "main_index": 0,
@@ -322,7 +343,8 @@ class InterviewStore:
             "answers": [], "transcript": [], "reviews": [],
             "carried": carried, "resume_context": resume_context or {},
             "ai_powered": ai_powered, "model_turns": 1 if ai_powered else 0,
-            "fallback_turns": 0, "done": False, "ended": False,
+            "fallback_turns": 0, "coach_error": coach_error,
+            "done": False, "ended": False,
         }
         return {"sessionId": sid, "firstQuestion": first,
                 "carriedFromEarlier": carried, "mode": mode,
@@ -384,7 +406,8 @@ class InterviewStore:
                         s["transcript"], s.get("followup_count", 0) > 0)
                 if not isinstance(review, dict):
                     review = None
-            except Exception:
+            except Exception as exc:
+                s["coach_error"] = str(exc)[:500]
                 review = None
         if review is None:
             review = self._fallback_review(
@@ -415,6 +438,7 @@ class InterviewStore:
         else:
             s["model_turns"] += 1
             s["ai_powered"] = True
+            s["coach_error"] = None
 
         is_followup = bool(s.get("current_is_followup"))
         normalized = {
@@ -428,6 +452,7 @@ class InterviewStore:
             "deliveryStrengths": _strings(review.get("delivery_strengths")),
             "deliveryImprovements": _strings(review.get("delivery_improvements")),
             "deliveryMetrics": metrics,
+            "answer": answer,
         }
         s["transcript"].append({"question": question, "answer": answer,
                                 "isFollowUp": is_followup,
@@ -509,6 +534,7 @@ class InterviewStore:
             "mode": s.get("mode", "text"),
             "aiPowered": bool(s["ai_powered"]),
             "coachMode": mode,
+            "coachError": s.get("coach_error"),
             "ended": bool(s.get("ended")),
         }
         s["feedback"] = fb
