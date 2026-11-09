@@ -89,3 +89,10 @@ def test_interview_rejects_empty_answer(c):
     response = c.post(f"/v1/interview/{sid}/answer", json={"text": "   "})
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "answer_empty"
+
+
+def test_direct_interview_page_is_served(c):
+    response = c.get("/interview")
+    assert response.status_code == 200
+    assert "Slate" in response.text
+    assert "Start interview" in response.text
