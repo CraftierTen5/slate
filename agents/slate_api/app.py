@@ -30,7 +30,8 @@ from slate_core.auth import AuthError  # noqa: E402
 STATUS = {"resume_not_found": 404, "job_not_found": 404, "draft_not_found": 404, "session_not_found": 404,
           "resume_unreadable": 422, "invalid_decision": 422, "role_unknown": 404, "mode_unsupported": 422,
           "draft_not_approved": 403, "draft_rejected": 409, "unsupported_claim": 422,
-          "demo_reset_disabled": 403, "reset_not_confirmed": 422}
+          "demo_reset_disabled": 403, "reset_not_confirmed": 422,
+          "answer_empty": 422, "interview_complete": 409}
 STATUS.setdefault("ai_not_configured", 503)  # appended, so sibling PRs editing the dict do not collide
 STATUS.setdefault("unauthenticated", 401)
 STATUS.setdefault("invalid_token", 401)
@@ -57,11 +58,12 @@ class RoadmapIn(BaseModel):
     targetRole: str
 
 class MockIn(BaseModel):
-    targetRole: str
+    targetRole: str = Field(min_length=1, max_length=120)
     mode: str = "text"
+    resumeId: Optional[str] = None
 
 class AnswerIn(BaseModel):
-    text: str
+    text: str = Field(min_length=1, max_length=20_000)
 
 class ApprovalIn(BaseModel):
     draftId: str
@@ -139,7 +141,8 @@ def _mount(r: APIRouter, get_svc):
 
     @r.post("/interview/mock")
     def mock(request: Request, b: MockIn):
-        with get_svc(request) as svc: return svc.start_interview(b.targetRole, b.mode)
+        with get_svc(request) as svc:
+            return svc.start_interview(b.targetRole, b.mode, b.resumeId)
 
     @r.post("/interview/{sid}/answer")
     def answer(request: Request, sid: str, b: AnswerIn):
