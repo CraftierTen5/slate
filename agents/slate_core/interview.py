@@ -127,6 +127,30 @@ class InterviewStore:
         self.coach = coach
 
     @staticmethod
+    def _clean_delivery_metrics(value):
+        if not isinstance(value, dict):
+            return None
+        bounds = {
+            "durationSeconds": (0, 600), "wordsPerMinute": (0, 600),
+            "pauseRatio": (0, 1), "pauseCount": (0, 500),
+            "fillerCount": (0, 200), "meanVolume": (0, 1),
+            "volumeVariation": (0, 1), "medianPitchHz": (50, 500),
+            "pitchRangeHz": (0, 500),
+        }
+        cleaned = {}
+        for key, (low, high) in bounds.items():
+            raw = value.get(key)
+            if raw is None:
+                continue
+            try:
+                number = float(raw)
+            except (TypeError, ValueError):
+                continue
+            if number == number:
+                cleaned[key] = round(max(low, min(high, number)), 3)
+        return cleaned or None
+
+    @staticmethod
     def _fallback_review(answer):
         words = len(answer.split())
         score = 1 if words < 12 else 2 if words < 20 else 3 if words < 40 else 4
@@ -212,7 +236,7 @@ class InterviewStore:
 
         question = s["current_question"]
         answer = text.strip()[:20000]
-        metrics = delivery_metrics if isinstance(delivery_metrics, dict) else None
+        metrics = self._clean_delivery_metrics(delivery_metrics)
         review = None
         if self.coach is not None:
             try:
