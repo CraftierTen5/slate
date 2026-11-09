@@ -353,6 +353,10 @@ class InterviewStore:
             weak.append("interview still in progress")
         scores = [r["score"] for r in reviews]
         average = round(sum(scores) / len(scores), 1) if scores else 0
+        delivery_scores = [r["deliveryScore"] for r in reviews
+                           if isinstance(r.get("deliveryScore"), (int, float))]
+        average_delivery = (round(sum(delivery_scores) / len(delivery_scores), 1)
+                            if delivery_scores else None)
         mode = ("gemini" if s["ai_powered"] and not s["fallback_turns"] else
                 "mixed" if s["ai_powered"] else "deterministic_fallback")
         fb = {
@@ -360,6 +364,7 @@ class InterviewStore:
             "weakAreas": list(dict.fromkeys(weak)),
             "transcriptRef": sid,
             "averageScore": average,
+            "averageDeliveryScore": average_delivery,
             "strengths": list(dict.fromkeys(strengths))[:8],
             "improvements": list(dict.fromkeys(improvements))[:8],
             "answerReviews": reviews,
