@@ -34,10 +34,10 @@ class AISlateService(SlateService):
     def __init__(self, store=None, llm_client=None):
         super().__init__(store)
         self._llm_client = llm_client  # tests inject MockLLM here
-        # Interview coaching is opt-in via the existing server-side LLM_API_KEY.
-        # No key means the deterministic interview path remains available.
+        # Interview coaching uses Gemini only. LLM_API_KEY may belong to Groq
+        # (used by AI tailoring) and must never be sent to the Gemini endpoint.
         import os
-        if llm_client is not None or os.getenv("GEMINI_API_KEY") or os.getenv("LLM_API_KEY"):
+        if llm_client is not None or os.getenv("GEMINI_API_KEY"):
             from .interview import GeminiInterviewCoach
             self.interviews.coach = GeminiInterviewCoach(llm_client)
 
