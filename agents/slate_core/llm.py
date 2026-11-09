@@ -42,9 +42,10 @@ class MockLLM(LLMClient):
 class GeminiLLM(LLMClient):
     """Gemini Developer API over stdlib urllib. Key comes from LLM_API_KEY."""
 
-    def __init__(self, model: str = DEFAULT_MODEL, api_key: str = None, timeout: int = 30):
-        self.model = model
-        self.api_key = api_key if api_key is not None else os.environ.get("LLM_API_KEY", "")
+    def __init__(self, model: str = None, api_key: str = None, timeout: int = 30):
+        self.model = model or os.environ.get("GEMINI_MODEL", DEFAULT_MODEL)
+        self.api_key = (api_key if api_key is not None else
+                        os.environ.get("GEMINI_API_KEY") or os.environ.get("LLM_API_KEY", ""))
         self.timeout = timeout
 
     def _request_body(self, prompt: str) -> bytes:
