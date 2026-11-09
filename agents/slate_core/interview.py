@@ -59,7 +59,7 @@ class GeminiInterviewCoach:
         return question.strip()[:1000]
 
     def evaluate_answer(self, role, question, answer, resume_context,
-                        history, followup_used):
+                        history, followup_used, delivery_metrics=None):
         prompt = (
             "You are a rigorous but constructive interviewer evaluating one "
             "candidate answer. Judge relevance, correctness, reasoning, "
@@ -70,16 +70,25 @@ class GeminiInterviewCoach:
             "If the answer is unclear, incomplete, or lacks evidence and no "
             "follow-up has yet been asked for this main question, set "
             "follow_up_question to one targeted probe. Otherwise set it to null. "
-            "Always provide the next distinct main interview question. Return "
-            "ONLY JSON with keys: score, feedback, strengths, improvements, "
-            "follow_up_question, next_question, topic. "
+            "You may ask a targeted follow-up to any answer, including an answer "
+            "to a previous follow-up, when a human interviewer would probe further. "
+            "Do not force a follow-up when the answer is complete. Always provide "
+            "the next distinct main interview question as a fallback. Evaluate "
+            "delivery separately from content when delivery metrics are supplied. "
+            "Do not infer personality, emotion, honesty, or suitability from voice. "
+            "Assess only observable mechanics such as pace, pauses, filler words, "
+            "volume consistency, and pitch variation. Return ONLY JSON with keys: "
+            "score, feedback, strengths, improvements, follow_up_question, "
+            "next_question, topic, delivery_score, delivery_feedback, "
+            "delivery_strengths, delivery_improvements. "
             "Use arrays for strengths/improvements; strings for other text.\n\n"
             f"TARGET ROLE: {role}\n"
             f"RESUME FACTS: {json.dumps(resume_context or {}, ensure_ascii=False)}\n"
             f"RECENT TRANSCRIPT: {json.dumps(history[-8:], ensure_ascii=False)}\n"
             f"CURRENT QUESTION: {question}\n"
             f"CANDIDATE ANSWER: {answer}\n"
-            f"FOLLOW-UP ALREADY USED FOR THIS QUESTION: {str(bool(followup_used)).lower()}"
+            f"FOLLOW-UP ALREADY USED FOR THIS QUESTION: {str(bool(followup_used)).lower()}\n"
+            f"VOICE DELIVERY METRICS (null if unavailable): {json.dumps(delivery_metrics, ensure_ascii=False)}"
         )
         data = _json_object(self.client.generate(prompt))
         try:
@@ -97,6 +106,10 @@ class GeminiInterviewCoach:
             "follow_up_question": followup.strip()[:1000] if isinstance(followup, str) and followup.strip() else None,
             "next_question": next_question.strip()[:1000] if isinstance(next_question, str) and next_question.strip() else None,
             "topic": str(data.get("topic") or "").strip()[:120],
+            "delivery_score": max(1, min(5, int(data.get("delivery_score", 3)))) if delivery_metrics else None,
+            "delivery_feedback": str(data.get("delivery_feedback") or "").strip()[:1000] if delivery_metrics else "",
+            "delivery_strengths": _strings(data.get("delivery_strengths")) if delivery_metrics else [],
+            "delivery_improvements": _strings(data.get("delivery_improvements")) if delivery_metrics else [],
         }
 
 
@@ -129,8 +142,6 @@ class InterviewStore:
         sid = f"int_{self._n:03d}"
         qs = list(INTERVIEW_QUESTIONS.get(target_role, INTERVIEW_QUESTIONS["default"]))
         carried = list(dict.fromkeys(w for f in past_feedback for w in f.get("weakAreas", [])))
-        # Preserve the old, explainable offline behavior and make prior weak
-        # areas explicit when no model is configured or available.
         for w in reversed(carried):
             qs.insert(0, f"Last time this was weak: {w}. Try again.")
         first = qs[0]
@@ -144,11 +155,12 @@ class InterviewStore:
         self._sessions[sid] = {
             "role": target_role, "mode": mode, "questions": [first],
             "fallback_questions": qs, "main_index": 0,
-            "max_main_questions": max(1, len(qs)), "current_question": first,
-            "followup_used": False, "answers": [], "transcript": [],
-            "reviews": [], "carried": carried, "resume_context": resume_context or {},
+            "current_question": first, "current_is_followup": False,
+            "followup_used": False, "followup_count": 0,
+            "answers": [], "transcript": [], "reviews": [],
+            "carried": carried, "resume_context": resume_context or {},
             "ai_powered": ai_powered, "model_turns": 1 if ai_powered else 0,
-            "fallback_turns": 0,
+            "fallback_turns": 0, "done": False, "ended": False,
         }
         return {"sessionId": sid, "firstQuestion": first,
                 "carriedFromEarlier": carried, "mode": mode,
@@ -181,24 +193,25 @@ class InterviewStore:
             "done": len(answers) >= len(questions),
         })
 
-    def answer(self, sid: str, text: str) -> dict:
+    def answer(self, sid: str, text: str, delivery_metrics=None) -> dict:
         s = self._sessions.get(sid)
         if s is None:
             raise KeyError("session_not_found")
         self._upgrade_legacy_session(s)
         if not isinstance(text, str) or not text.strip():
             raise ValueError("answer_empty")
-        if s.get("done"):
-            raise ValueError("interview_complete")
+        if s.get("ended"):
+            raise ValueError("interview_ended")
 
         question = s["current_question"]
         answer = text.strip()[:20000]
+        metrics = delivery_metrics if isinstance(delivery_metrics, dict) else None
         review = None
         if self.coach is not None:
             try:
                 review = self.coach.evaluate_answer(
                     s["role"], question, answer, s["resume_context"],
-                    s["transcript"], s["followup_used"])
+                    s["transcript"], s.get("followup_count", 0) > 0, metrics)
                 if not isinstance(review, dict):
                     review = None
             except Exception:
@@ -210,25 +223,32 @@ class InterviewStore:
             s["model_turns"] += 1
             s["ai_powered"] = True
 
-        is_followup = bool(s["followup_used"])
+        is_followup = bool(s.get("current_is_followup"))
         normalized = {
             "score": max(1, min(5, int(review.get("score", 3)))),
             "feedback": str(review.get("feedback") or "").strip(),
             "strengths": _strings(review.get("strengths")),
             "improvements": _strings(review.get("improvements")),
             "topic": str(review.get("topic") or "").strip()[:120],
+            "deliveryScore": review.get("delivery_score"),
+            "deliveryFeedback": str(review.get("delivery_feedback") or "").strip(),
+            "deliveryStrengths": _strings(review.get("delivery_strengths")),
+            "deliveryImprovements": _strings(review.get("delivery_improvements")),
+            "deliveryMetrics": metrics,
         }
         s["transcript"].append({"question": question, "answer": answer,
-                                "isFollowUp": is_followup})
+                                "isFollowUp": is_followup,
+                                "deliveryMetrics": metrics})
         s["answers"].append(answer)
         s["reviews"].append({**normalized, "question": question,
                              "isFollowUp": is_followup})
 
         followup = review.get("follow_up_question")
-        if (not is_followup and isinstance(followup, str)
-                and followup.strip()):
+        if isinstance(followup, str) and followup.strip():
             s["followup_used"] = True
+            s["followup_count"] = s.get("followup_count", 0) + 1
             s["current_question"] = followup.strip()[:1000]
+            s["current_is_followup"] = True
             s["questions"].append(s["current_question"])
             return {"done": False, "nextQuestion": s["current_question"],
                     "isFollowUp": True, "evaluation": normalized,
@@ -236,20 +256,26 @@ class InterviewStore:
 
         s["main_index"] += 1
         s["followup_used"] = False
-        if s["main_index"] >= s["max_main_questions"]:
-            s["done"] = True
-            return {"done": True, "nextQuestion": None,
-                    "isFollowUp": False, "evaluation": normalized,
-                    "aiPowered": s["ai_powered"]}
-
+        s["followup_count"] = 0
+        s["current_is_followup"] = False
         next_question = review.get("next_question")
         if not isinstance(next_question, str) or not next_question.strip() or next_question.strip() == question:
-            next_question = s["fallback_questions"][s["main_index"]]
+            fallback = s["fallback_questions"]
+            next_question = fallback[s["main_index"] % len(fallback)]
         s["current_question"] = next_question.strip()[:1000]
         s["questions"].append(s["current_question"])
         return {"done": False, "nextQuestion": s["current_question"],
                 "isFollowUp": False, "evaluation": normalized,
                 "aiPowered": s["ai_powered"]}
+
+    def end(self, sid: str) -> dict:
+        s = self._sessions.get(sid)
+        if s is None:
+            raise KeyError("session_not_found")
+        self._upgrade_legacy_session(s)
+        s["ended"] = True
+        s["done"] = True
+        return self.feedback(sid)
 
     def feedback(self, sid: str) -> dict:
         s = self._sessions.get(sid)
@@ -265,8 +291,8 @@ class InterviewStore:
                 weak.append(topic.strip() or item["question"])
             strengths.extend(item.get("strengths", []))
             improvements.extend(item.get("improvements", []))
-        if len(s["answers"]) < len(s["questions"]) and not s.get("done"):
-            weak.append("unanswered questions")
+        if not s.get("ended") and len(s["answers"]) < len(s["questions"]):
+            weak.append("interview still in progress")
         scores = [r["score"] for r in reviews]
         average = round(sum(scores) / len(scores), 1) if scores else 0
         mode = ("gemini" if s["ai_powered"] and not s["fallback_turns"] else
@@ -283,6 +309,7 @@ class InterviewStore:
             "mode": s.get("mode", "text"),
             "aiPowered": bool(s["ai_powered"]),
             "coachMode": mode,
+            "ended": bool(s.get("ended")),
         }
         s["feedback"] = fb
         return fb
