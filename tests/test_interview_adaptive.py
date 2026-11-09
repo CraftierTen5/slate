@@ -161,3 +161,33 @@ def test_delivery_metrics_get_a_separate_rule_based_score_without_gemini():
     assert 1 <= result["evaluation"]["deliveryScore"] <= 5
     report = store.end(sid)
     assert report["averageDeliveryScore"] == result["evaluation"]["deliveryScore"]
+
+
+def test_human_relations_role_gets_hr_questions_and_specific_fallback_feedback():
+    store = InterviewStore()
+    started = store.start("human relations", [])
+    sid = started["sessionId"]
+    first = started["firstQuestion"].lower()
+    assert "hiring manager" in first
+    assert "project" not in first
+
+    result = store.answer(sid, "I would first clarify the role requirements with the manager, agree on essential criteria, document the decision, and use the same criteria for every candidate.")
+    assert result["isFollowUp"] is True
+    assert "criteria" in result["nextQuestion"].lower()
+    assert any("selection criteria" in item.lower() or "candidate evaluation" in item.lower()
+               for item in result["evaluation"]["improvements"])
+
+
+def test_fallback_question_bank_does_not_loop_after_three_questions():
+    store = InterviewStore()
+    started = store.start("Human Relations", [])
+    sid = started["sessionId"]
+    asked = [started["firstQuestion"]]
+    answer = "I would listen to each person, establish the facts, check the relevant policy, agree practical next steps, document the decision, and follow up to make sure the issue is resolved. " * 2
+    for _ in range(15):
+        result = store.answer(sid, answer)
+        next_question = result["nextQuestion"]
+        assert next_question not in asked
+        asked.append(next_question)
+    assert len(set(asked)) == 16
+    assert all("project you built" not in q.lower() for q in asked)
