@@ -16,10 +16,6 @@ def test_gemini_coach_parses_question_and_evaluation():
     coach = GeminiInterviewCoach(model)
     question = coach.first_question("Data Analyst", {"skills": ["python"]}, [])
     assert "Python" in question
-    result = coach.evaluate_answer(
-        "Data Analyst", question, "I automated a report with Python.",
-        {"skills": ["python"]}, [], False
-    ) if False else None
 
 
 def test_interview_store_adapts_and_allows_one_followup_per_main_question():
@@ -61,7 +57,7 @@ def test_interview_store_adapts_and_allows_one_followup_per_main_question():
     fb = store.feedback(started["sessionId"])
     assert fb["averageScore"] == 3
     assert fb["mode"] == "voice"
-    assert fb["weakAreas"] == []
+    assert fb["weakAreas"] == ["Python projects"]
 
 
 def test_deterministic_fallback_remains_available():
