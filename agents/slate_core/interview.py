@@ -345,7 +345,8 @@ class InterviewStore:
         return {"sessionId": sid, "firstQuestion": first,
                 "carriedFromEarlier": carried, "mode": mode,
                 "aiPowered": ai_powered,
-                "coachMode": "gemini" if ai_powered else "deterministic_fallback"}
+                "coachMode": "gemini" if ai_powered else "deterministic_fallback",
+                "coachError": coach_error}
 
     def _upgrade_legacy_session(self, session):
         """Upgrade sessions persisted by the pre-adaptive interview store in place."""
