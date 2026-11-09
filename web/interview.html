@@ -141,7 +141,7 @@ async function measureDelivery(blob,transcript){
   }
   pitchValues.sort((a,b)=>a-b);
   const percentile=p=>pitchValues.length?pitchValues[Math.min(pitchValues.length-1,Math.floor((pitchValues.length-1)*p))]:null;
-  const fillers=(transcript.toLowerCase().match(/\b(um|uh|erm| like |you know|basically|actually)\b/g)||[]).length;
+  const fillers=(transcript.toLowerCase().match(/\b(um|uh|erm|like|you know|basically|actually)\b/g)||[]).length;
   return {durationSeconds:+duration.toFixed(1),wordsPerMinute:Math.round(words/Math.max(duration,1)*60),
    pauseRatio:+(silent/Math.max(1,levels.length)).toFixed(2),pauseCount:pauses,
    fillerCount:fillers,meanVolume:+mean.toFixed(4),volumeVariation:+Math.sqrt(variance).toFixed(4),
