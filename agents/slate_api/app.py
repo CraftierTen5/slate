@@ -40,7 +40,7 @@ STATUS = {"resume_not_found": 404, "job_not_found": 404, "draft_not_found": 404,
           "resume_unreadable": 422, "invalid_decision": 422, "role_unknown": 404, "mode_unsupported": 422,
           "draft_not_approved": 403, "draft_rejected": 409, "unsupported_claim": 422,
           "demo_reset_disabled": 403, "reset_not_confirmed": 422,
-          "answer_empty": 422, "interview_complete": 409}
+          "answer_empty": 422, "interview_complete": 409, "interview_ended": 409}
 STATUS.setdefault("ai_not_configured", 503)  # appended, so sibling PRs editing the dict do not collide
 STATUS.setdefault("unauthenticated", 401)
 STATUS.setdefault("invalid_token", 401)
