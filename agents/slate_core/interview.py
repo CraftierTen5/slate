@@ -13,8 +13,8 @@ from .sample_data import INTERVIEW_QUESTIONS
 def _json_object(raw):
     """Accept JSON returned bare or inside a Markdown code fence."""
     text = str(raw or "").strip()
-    text = re.sub(r"^\`\`\`(?:json)?\\s*", "", text, flags=re.I)
-    text = re.sub(r"\\s*\`\`\`$", "", text)
+    text = re.sub(r"^\`\`\`(?:json)?\s*", "", text, flags=re.I)
+    text = re.sub(r"\s*\`\`\`$", "", text)
     start, end = text.find("{"), text.rfind("}")
     if start < 0 or end <= start:
         raise ValueError("The interview model did not return a JSON object.")
@@ -47,9 +47,9 @@ class GeminiInterviewCoach:
             "question. Personalize it using only the supplied resume facts; do "
             "not assume experience that is not listed. If prior weak areas exist, "
             "revisit one naturally. Return ONLY JSON: "
-            '{"question":"...","topic":"..."}.\\n\\n'
-            f"TARGET ROLE: {role}\\n"
-            f"RESUME FACTS (may be empty): {json.dumps(resume_context or {}, ensure_ascii=False)}\\n"
+            '{"question":"...","topic":"..."}.\n\n'
+            f"TARGET ROLE: {role}\n"
+            f"RESUME FACTS (may be empty): {json.dumps(resume_context or {}, ensure_ascii=False)}\n"
             f"PRIOR WEAK AREAS: {json.dumps(past_feedback, ensure_ascii=False)}"
         )
         data = _json_object(self.client.generate(prompt))
@@ -73,12 +73,12 @@ class GeminiInterviewCoach:
             "Always provide the next distinct main interview question. Return "
             "ONLY JSON with keys: score, feedback, strengths, improvements, "
             "follow_up_question, next_question, topic. "
-            "Use arrays for strengths/improvements; strings for other text.\\n\\n"
-            f"TARGET ROLE: {role}\\n"
-            f"RESUME FACTS: {json.dumps(resume_context or {}, ensure_ascii=False)}\\n"
-            f"RECENT TRANSCRIPT: {json.dumps(history[-8:], ensure_ascii=False)}\\n"
-            f"CURRENT QUESTION: {question}\\n"
-            f"CANDIDATE ANSWER: {answer}\\n"
+            "Use arrays for strengths/improvements; strings for other text.\n\n"
+            f"TARGET ROLE: {role}\n"
+            f"RESUME FACTS: {json.dumps(resume_context or {}, ensure_ascii=False)}\n"
+            f"RECENT TRANSCRIPT: {json.dumps(history[-8:], ensure_ascii=False)}\n"
+            f"CURRENT QUESTION: {question}\n"
+            f"CANDIDATE ANSWER: {answer}\n"
             f"FOLLOW-UP ALREADY USED FOR THIS QUESTION: {str(bool(followup_used)).lower()}"
         )
         data = _json_object(self.client.generate(prompt))
