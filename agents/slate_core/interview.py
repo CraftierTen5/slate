@@ -13,8 +13,8 @@ from .sample_data import INTERVIEW_QUESTIONS
 def _json_object(raw):
     """Accept JSON returned bare or inside a Markdown code fence."""
     text = str(raw or "").strip()
-    text = re.sub(r"^\`\`\`(?:json)?\s*", "", text, flags=re.I)
-    text = re.sub(r"\s*\`\`\`$", "", text)
+    text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.I)
+    text = re.sub(r"\s*```$", "", text)
     start, end = text.find("{"), text.rfind("}")
     if start < 0 or end <= start:
         raise ValueError("The interview model did not return a JSON object.")
