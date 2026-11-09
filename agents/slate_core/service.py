@@ -214,17 +214,23 @@ class SlateService:
                                      self.interviews.past_feedback(),
                                      resume_context=context, mode=mode)
 
-    def _answer_interview(self, session_id, text) -> dict:
+    def _answer_interview(self, session_id, text, delivery_metrics=None) -> dict:
         try:
-            return self.interviews.answer(session_id, text)
+            return self.interviews.answer(session_id, text, delivery_metrics)
         except KeyError:
             raise SlateError("session_not_found", "No interview session with that id.")
         except ValueError as e:
             if str(e) == "answer_empty":
                 raise SlateError("answer_empty", "Enter or dictate an answer before submitting.")
-            if str(e) == "interview_complete":
-                raise SlateError("interview_complete", "This interview is already complete.")
+            if str(e) in ("interview_complete", "interview_ended"):
+                raise SlateError("interview_ended", "This interview has ended.")
             raise
+
+    def _end_interview(self, session_id) -> dict:
+        try:
+            return self.interviews.end(session_id)
+        except KeyError:
+            raise SlateError("session_not_found", "No interview session with that id.")
 
     def _interview_feedback(self, session_id) -> dict:
         try:
@@ -264,5 +270,10 @@ class SlateService:
 
     def interview_feedback(self, *a, **k):
         r = self._interview_feedback(*a, **k)
+        self._persist()
+        return r
+
+    def end_interview(self, *a, **k):
+        r = self._end_interview(*a, **k)
         self._persist()
         return r
