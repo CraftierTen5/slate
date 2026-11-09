@@ -67,9 +67,10 @@ class GeminiInterviewCoach:
             "alone. Do not invent candidate achievements or treat resume claims "
             "as independently verified. Give a score from 1 (poor) to 5 "
             "(excellent), concise actionable feedback, strengths and improvements. "
-            "If the answer is unclear, incomplete, or lacks evidence and no "
-            "follow-up has yet been asked for this main question, set "
-            "follow_up_question to one targeted probe. Otherwise set it to null. "
+            "If the answer is unclear, incomplete, contradictory, or lacks "
+            "evidence, set follow_up_question to one targeted probe. You may "
+            "continue probing a follow-up answer when useful; do not impose a "
+            "one-follow-up limit. Otherwise set it to null. "
             "You may ask a targeted follow-up to any answer, including an answer "
             "to a previous follow-up, when a human interviewer would probe further. "
             "Do not force a follow-up when the answer is complete. Always provide "
@@ -96,6 +97,12 @@ class GeminiInterviewCoach:
         except (TypeError, ValueError):
             score = 3
         score = max(1, min(5, score))
+        try:
+            delivery_score = int(data.get("delivery_score", 3)) if delivery_metrics else None
+        except (TypeError, ValueError):
+            delivery_score = 3 if delivery_metrics else None
+        if delivery_score is not None:
+            delivery_score = max(1, min(5, delivery_score))
         followup = data.get("follow_up_question")
         next_question = data.get("next_question")
         return {
@@ -106,7 +113,7 @@ class GeminiInterviewCoach:
             "follow_up_question": followup.strip()[:1000] if isinstance(followup, str) and followup.strip() else None,
             "next_question": next_question.strip()[:1000] if isinstance(next_question, str) and next_question.strip() else None,
             "topic": str(data.get("topic") or "").strip()[:120],
-            "delivery_score": max(1, min(5, int(data.get("delivery_score", 3)))) if delivery_metrics else None,
+            "delivery_score": delivery_score,
             "delivery_feedback": str(data.get("delivery_feedback") or "").strip()[:1000] if delivery_metrics else "",
             "delivery_strengths": _strings(data.get("delivery_strengths")) if delivery_metrics else [],
             "delivery_improvements": _strings(data.get("delivery_improvements")) if delivery_metrics else [],
@@ -224,6 +231,27 @@ class InterviewStore:
                 review = None
         if review is None:
             review = self._fallback_review(answer)
+            if metrics:
+                wpm = float(metrics.get("wordsPerMinute", 0) or 0)
+                pause_ratio = float(metrics.get("pauseRatio", 0) or 0)
+                fillers = int(metrics.get("fillerCount", 0) or 0)
+                words = max(1, len(answer.split()))
+                delivery_score = 3
+                if 100 <= wpm <= 170:
+                    delivery_score += 1
+                elif wpm < 70 or wpm > 210:
+                    delivery_score -= 1
+                if fillers / words > 0.06:
+                    delivery_score -= 1
+                if pause_ratio > 0.55 or pause_ratio < 0.03:
+                    delivery_score -= 1
+                review.update({
+                    "delivery_score": max(1, min(5, delivery_score)),
+                    "delivery_feedback": "Rule-based estimate from pace, pauses, filler-word frequency and volume activity. Treat this as coaching guidance, not a personality or confidence assessment.",
+                    "delivery_strengths": [],
+                    "delivery_improvements": ["Aim for a steady, conversational pace" if wpm < 100 or wpm > 170 else "Maintain this speaking pace",
+                                              "Reduce repeated filler words" if fillers / words > 0.06 else "Keep filler words limited"],
+                })
             s["fallback_turns"] += 1
         else:
             s["model_turns"] += 1
