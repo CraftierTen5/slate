@@ -1,12 +1,7 @@
-"""Optional LLM adapter for tailoring and interview feedback.
+"""Server-side LLM adapters for Gemini interview coaching and Groq tailoring.
 
-Not wired into tailor.py or interview.py yet: those stay deterministic by default.
-Gemini interview coaching uses GEMINI_API_KEY; Groq tailoring uses LLM_API_KEY. No key is
-ever read from or written to the client, and tests use MockLLM only.
-
-Swap points (documented in slate_core README): tailor.build_draft text generation
-and interview question/feedback generation can take an LLMClient later without
-changing the API contract shapes.
+Gemini interview coaching uses GEMINI_API_KEY; Groq tailoring uses LLM_API_KEY.
+Neither key is read from or written to the client. Tests can inject MockLLM.
 """
 import json
 import os
