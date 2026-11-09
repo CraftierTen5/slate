@@ -41,7 +41,7 @@ def test_interview_store_adapts_and_allows_one_followup_per_main_question():
             return {
                 "score": 4, "feedback": "Clearer with a result.",
                 "strengths": ["Specific result"], "improvements": [],
-                "follow_up_question": "Do not ask another follow-up.",
+                "follow_up_question": None,
                 "next_question": "How would you validate a dataset?",
                 "topic": "Python projects"
             }
@@ -183,7 +183,7 @@ def test_fallback_question_bank_does_not_loop_after_three_questions():
     started = store.start("Human Relations", [])
     sid = started["sessionId"]
     asked = [started["firstQuestion"]]
-    answer = "I would listen to each person, establish the facts, check the relevant policy, agree practical next steps, document the decision, and follow up to make sure the issue is resolved. " * 2
+    answer = "I would listen to each person, establish the facts, check the relevant policy, agree practical next steps, document the decision, and follow up to make sure the issue is resolved. " * 4
     for _ in range(15):
         result = store.answer(sid, answer)
         next_question = result["nextQuestion"]
