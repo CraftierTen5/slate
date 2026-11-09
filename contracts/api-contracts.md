@@ -98,17 +98,11 @@ A tailor result is always a draft. Nothing leaves the system without the approva
 
 ### 5. Mock interview
 
-`POST /v1/interview/mock` with `{ "targetRole": "Data Analyst", "mode": "text" }` starts a session and returns `{ "sessionId": "int_101" }`.
+`POST /v1/interview/mock` accepts `{ "targetRole": "Data Analyst", "mode": "text", "resumeId": "res_123" }`; `mode` may be `text` or `voice`, and `resumeId` is optional. The authenticated service scopes the resume to the verified user and sends only bounded structured resume facts to the server-side Gemini coach. The response includes `sessionId`, `firstQuestion`, `carriedFromEarlier`, `mode`, `aiPowered`, and `coachMode`.
 
-`GET /v1/interview/{sessionId}/feedback`
+`POST /v1/interview/{sessionId}/answer` accepts `{ "text": "..." }` and returns `done`, `nextQuestion`, `isFollowUp`, `evaluation`, and `aiPowered`. Evaluation includes a 1-5 score, concise feedback, strengths, improvements, and topic. Gemini may ask at most one targeted follow-up for each main question; after that, the interview advances to another main question. The interview store persists transcript and evaluation data in the existing per-user snapshot.
 
-```json
-{
-  "summary": "...",
-  "weakAreas": ["system design basics"],
-  "transcriptRef": "int_101"
-}
-```
+`GET /v1/interview/{sessionId}/feedback` returns a summary, average score, weak areas, strengths, improvements, per-answer reviews, transcript reference, mode, and coach mode (`gemini`, `mixed`, or `deterministic_fallback`). Model errors or missing Gemini configuration fall back to deterministic evaluation so the interview remains usable. The fallback is clearly labeled and is not presented as AI evaluation. Browser voice mode uses speech recognition and speech synthesis where supported; typed answers remain available.
 
 Interview memory must persist: a later session can reference earlier feedback through `transcriptRef`.
 
