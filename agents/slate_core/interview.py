@@ -31,6 +31,63 @@ def _strings(value, limit=5):
             if isinstance(item, (str, int, float)) and str(item).strip()][:limit]
 
 
+def _role_questions(role):
+    """Resolve common role-name variants without silently treating HR as a tech role."""
+    normalized = re.sub(r"[^a-z0-9]+", " ", str(role or "").lower()).strip()
+    if normalized in {"hr", "human relations", "human resource", "human resources",
+                      "hr generalist", "hr executive", "human resource management"}:
+        return list(INTERVIEW_QUESTIONS["Human Resources"])
+    for key, questions in INTERVIEW_QUESTIONS.items():
+        if key == "default":
+            continue
+        if re.sub(r"[^a-z0-9]+", " ", key.lower()).strip() == normalized:
+            return list(questions)
+    return list(INTERVIEW_QUESTIONS["default"])
+
+
+def _question_seen(candidate, asked):
+    """Reject exact repeats and near-identical wording from a model or fallback."""
+    words = set(re.findall(r"[a-z0-9]+", str(candidate or "").lower()))
+    if not words:
+        return True
+    for previous in asked:
+        prior = set(re.findall(r"[a-z0-9]+", str(previous or "").lower()))
+        if words == prior:
+            return True
+        if len(words & prior) / max(1, len(words | prior)) >= 0.82:
+            return True
+    return False
+
+
+def _fallback_next_question(session):
+    """Select an unused prompt; after the bank, vary the scenario rather than loop."""
+    asked = session.get("questions", [])
+    bank = session.get("fallback_questions") or INTERVIEW_QUESTIONS["default"]
+    for question in bank:
+        if not _question_seen(question, asked):
+            return question
+    role = session.get("role", "this role")
+    angles = [
+        "Consider the same responsibility when you have very limited time.",
+        "Now consider a case where the people involved strongly disagree.",
+        "How would your approach change if the first solution did not work?",
+        "What would you do if important information was missing?",
+        "How would you handle this if the decision affected several stakeholders?",
+        "What would you measure afterwards to check whether your approach worked?",
+        "How would you explain your decision to someone who disagreed with it?",
+        "What risks would you look for before taking action?",
+    ]
+    index = max(0, len(asked) - len(bank))
+    base = bank[index % len(bank)]
+    angle = angles[index % len(angles)]
+    candidate = f"{angle} {base}"
+    # This suffix guarantees a distinct prompt even after all angle/base pairs.
+    generation = index // len(angles) + 1
+    if generation > 1:
+        candidate = f"{candidate} (alternative scenario {generation})"
+    return candidate
+
+
 class GeminiInterviewCoach:
     """Uses the existing LLMClient interface; the API key stays server-side."""
 
@@ -42,11 +99,13 @@ class GeminiInterviewCoach:
 
     def first_question(self, role, resume_context, past_feedback):
         prompt = (
-            "Act as a skilled, fair hiring interviewer. Start a realistic mock "
-            "interview for the target role. Ask exactly one concise, open-ended "
-            "question. Personalize it using only the supplied resume facts; do "
-            "not assume experience that is not listed. If prior weak areas exist, "
-            "revisit one naturally. Return ONLY JSON: "
+            "Act as a skilled human hiring interviewer who understands the actual work of the target role. "
+            "Ask exactly one concise, natural, role-specific opening question. "
+            "Do not use generic software-project questions unless the target role is a software/technical role. "
+            "For HR or human-relations roles, focus on recruitment, employee relations, conflict handling, "
+            "confidentiality, onboarding, policy, performance processes, fairness and stakeholder communication. "
+            "Use resume facts only when relevant; never assume experience that is not listed. "
+            "If prior weak areas exist, revisit one naturally. Return ONLY JSON: "
             '{"question":"...","topic":"..."}.\n\n'
             f"TARGET ROLE: {role}\n"
             f"RESUME FACTS (may be empty): {json.dumps(resume_context or {}, ensure_ascii=False)}\n"
@@ -61,21 +120,22 @@ class GeminiInterviewCoach:
     def evaluate_answer(self, role, question, answer, resume_context,
                         history, followup_used, delivery_metrics=None):
         prompt = (
-            "You are a rigorous but constructive interviewer evaluating one "
-            "candidate answer. Judge relevance, correctness, reasoning, "
-            "specificity, evidence/examples, and communication—not word count "
-            "alone. Do not invent candidate achievements or treat resume claims "
-            "as independently verified. Give a score from 1 (poor) to 5 "
-            "(excellent), concise actionable feedback, strengths and improvements. "
-            "If the answer is unclear, incomplete, contradictory, or lacks "
-            "evidence, set follow_up_question to one targeted probe. You may "
-            "continue probing a follow-up answer when useful; do not impose a "
-            "one-follow-up limit. Otherwise set it to null. "
-            "You may ask a targeted follow-up to any answer, including an answer "
-            "to a previous follow-up, when a human interviewer would probe further. "
-            "Do not force a follow-up when the answer is complete. Always provide "
-            "the next distinct main interview question as a fallback. Evaluate "
-            "delivery separately from content when delivery metrics are supplied. "
+            "You are a thoughtful, role-specialist human interviewer reviewing one candidate answer. "
+            "Evaluate whether the answer addresses the exact question and demonstrates sound judgement for the TARGET ROLE. "
+            "Do not use a generic rubric across unrelated professions. For HR/human-relations roles, assess fairness, "
+            "confidentiality, listening, policy awareness, documentation, practical judgement, employee impact and "
+            "appropriate escalation; do not reward irrelevant technical-project detail. "
+            "Do not invent candidate achievements or treat resume claims as verified. "
+            "Give a 1-5 score and feedback tied to specific details in the answer. "
+            "Improvements MUST be concrete: name what was missing, why it matters in this role, and what detail/action "
+            "the candidate should add. Avoid vague advice such as 'make the impact explicit' unless you say what impact "
+            "to quantify or explain. "
+            "Ask a follow-up only when it naturally arises from something the candidate actually said or omitted. "
+            "A follow-up must refer to a specific detail, ambiguity, decision or consequence in their answer; "
+            "never ask an unrelated stock question or repeat an earlier question. You may chain follow-ups, but "
+            "do not probe merely for the sake of it. If no meaningful probe remains, set follow_up_question to null. "
+            "Always propose a distinct next main question that has not appeared in the transcript. "
+            "Evaluate voice delivery separately from content when metrics are supplied. "
             "Do not infer personality, emotion, honesty, or suitability from voice. "
             "Assess only observable mechanics such as pace, pauses, filler words, "
             "volume consistency, and pitch variation. Return ONLY JSON with keys: "
@@ -85,7 +145,8 @@ class GeminiInterviewCoach:
             "Use arrays for strengths/improvements; strings for other text.\n\n"
             f"TARGET ROLE: {role}\n"
             f"RESUME FACTS: {json.dumps(resume_context or {}, ensure_ascii=False)}\n"
-            f"RECENT TRANSCRIPT: {json.dumps(history[-8:], ensure_ascii=False)}\n"
+            f"RECENT TRANSCRIPT: {json.dumps(history[-12:], ensure_ascii=False)}\n"
+            f"QUESTIONS ALREADY ASKED (do not repeat or paraphrase): {json.dumps([x.get('question', '') for x in history], ensure_ascii=False)}\n"
             f"CURRENT QUESTION: {question}\n"
             f"CANDIDATE ANSWER: {answer}\n"
             f"FOLLOW-UP ALREADY USED FOR THIS QUESTION: {str(bool(followup_used)).lower()}\n"
@@ -151,27 +212,50 @@ class InterviewStore:
         return cleaned or None
 
     @staticmethod
-    def _fallback_review(answer):
+    def _fallback_review(role, question, answer, allow_followup=True):
+        """Transparent offline review with role-aware prompts and actionable coaching."""
         words = len(answer.split())
-        score = 1 if words < 12 else 2 if words < 20 else 3 if words < 40 else 4
-        if score == 1:
-            feedback = "The answer is too brief to demonstrate your reasoning. Add a direct explanation and a concrete example."
-            improvements = ["Explain your reasoning", "Add a specific example or result"]
-        elif score == 2:
-            feedback = "Some detail is present, but the answer needs clearer reasoning and supporting evidence."
-            improvements = ["Explain the steps you took", "Include a concrete outcome"]
+        low_q, low_a = question.lower(), answer.lower()
+        score = 1 if words < 12 else 2 if words < 25 else 3 if words < 55 else 4
+        is_hr = any(term in str(role).lower() for term in ("human", "hr", "people", "personnel"))
+        if is_hr:
+            if any(term in low_q for term in ("confidential", "sensitive", "complaint", "unfair treatment")):
+                focus = "Explain how you would listen without promising absolute secrecy, record facts objectively, limit access to the information, and escalate under the organisation's process."
+                probe = "You mentioned handling the concern. What would you tell the employee about confidentiality, and who would need to be involved if the allegation required formal action?"
+            elif any(term in low_q for term in ("hiring", "recruit", "candidate", "vacancy", "interview")):
+                focus = "Name the job-related selection criteria, how you would align the hiring manager, and how you would keep candidate evaluation consistent."
+                probe = "What specific criteria would you agree with the hiring manager, and how would you make sure every candidate is assessed against the same standard?"
+            elif any(term in low_q for term in ("conflict", "disagreement", "upset", "manager", "employee")):
+                focus = "Describe how you would hear each perspective separately, check facts rather than take sides, agree next steps, and follow up."
+                probe = "What would you do if the two people gave you conflicting accounts, and how would you decide what to do next?"
+            elif any(term in low_q for term in ("onboarding", "new hire")):
+                focus = "Set out the immediate support you would provide, who owns each onboarding task, and how you would check the new hire is settling in."
+                probe = "How would you check after the first week that the new hire understands their responsibilities and has the support they need?"
+            else:
+                focus = "Explain the first action you would take, the policy or evidence you would consult, who you would involve, and how you would follow up."
+                probe = "What would be your first practical step, and what information would you need before deciding how to proceed?"
         else:
-            feedback = "The answer has enough detail for a basic review. Check that it directly addresses the question and supports claims with evidence."
-            improvements = ["Make the result or impact explicit"]
+            focus = "Connect your approach to the role: explain the steps you took, the reason for choosing them, and the evidence or outcome you used to judge success."
+            probe = "What was the most important decision you made, and what evidence showed whether it worked?"
+        if words < 25:
+            feedback = "There is not yet enough detail to assess your judgement. The answer needs a clearer sequence of actions and a reason for those actions."
+            improvements = [focus, "Add one specific example or realistic step-by-step scenario rather than describing your approach in general terms."]
+        elif words < 55:
+            feedback = "You have started to address the question, but the answer needs more role-specific reasoning and a clearer explanation of how you would handle the situation."
+            improvements = [focus]
+        else:
+            feedback = "The answer has enough detail for an initial review. Strengthen it by making the decision process and follow-through explicit."
+            improvements = [focus]
+        followup = probe if allow_followup and words < 85 else None
         return {"score": score, "feedback": feedback, "strengths": [],
-                "improvements": improvements, "follow_up_question": None,
-                "next_question": None, "topic": ""}
+                "improvements": improvements, "follow_up_question": followup,
+                "next_question": None, "topic": str(question)[:120]}
 
     def start(self, target_role: str, past_feedback: list,
               resume_context=None, mode="text") -> dict:
         self._n += 1
         sid = f"int_{self._n:03d}"
-        qs = list(INTERVIEW_QUESTIONS.get(target_role, INTERVIEW_QUESTIONS["default"]))
+        qs = _role_questions(target_role)
         carried = list(dict.fromkeys(w for f in past_feedback for w in f.get("weakAreas", [])))
         for w in reversed(carried):
             qs.insert(0, f"Last time this was weak: {w}. Try again.")
@@ -206,7 +290,9 @@ class InterviewStore:
         answers = list(session.get("answers", []))
         reviews, transcript = [], []
         for question, answer in zip(questions, answers):
-            review = self._fallback_review(answer)
+            review = self._fallback_review(
+                s["role"], question, answer,
+                allow_followup=(s.get("followup_count", 0) == 0))
             topic = question.split(":")[0].replace("Last time this was weak", "").strip()
             review["topic"] = topic or question[:120]
             review["question"] = question
@@ -301,8 +387,10 @@ class InterviewStore:
         s["reviews"].append({**normalized, "question": question,
                              "isFollowUp": is_followup})
 
+        asked_questions = [item.get("question", "") for item in s["transcript"]]
         followup = review.get("follow_up_question")
-        if isinstance(followup, str) and followup.strip():
+        if (isinstance(followup, str) and followup.strip()
+                and not _question_seen(followup, asked_questions)):
             s["followup_used"] = True
             s["followup_count"] = s.get("followup_count", 0) + 1
             s["current_question"] = followup.strip()[:1000]
@@ -317,9 +405,9 @@ class InterviewStore:
         s["followup_count"] = 0
         s["current_is_followup"] = False
         next_question = review.get("next_question")
-        if not isinstance(next_question, str) or not next_question.strip() or next_question.strip() == question:
-            fallback = s["fallback_questions"]
-            next_question = fallback[s["main_index"] % len(fallback)]
+        if (not isinstance(next_question, str) or not next_question.strip()
+                or _question_seen(next_question, asked_questions)):
+            next_question = _fallback_next_question(s)
         s["current_question"] = next_question.strip()[:1000]
         s["questions"].append(s["current_question"])
         return {"done": False, "nextQuestion": s["current_question"],
