@@ -34,6 +34,12 @@ class AISlateService(SlateService):
     def __init__(self, store=None, llm_client=None):
         super().__init__(store)
         self._llm_client = llm_client  # tests inject MockLLM here
+        # Interview coaching is opt-in via the existing server-side LLM_API_KEY.
+        # No key means the deterministic interview path remains available.
+        import os
+        if llm_client is not None or os.getenv("LLM_API_KEY"):
+            from .interview import GeminiInterviewCoach
+            self.interviews.coach = GeminiInterviewCoach(llm_client)
 
     def _blocks(self, resume_id, job):
         return source_blocks(self._texts[resume_id], job)
