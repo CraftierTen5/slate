@@ -37,7 +37,7 @@ class AISlateService(SlateService):
         # Interview coaching is opt-in via the existing server-side LLM_API_KEY.
         # No key means the deterministic interview path remains available.
         import os
-        if llm_client is not None or os.getenv("LLM_API_KEY"):
+        if llm_client is not None or os.getenv("GEMINI_API_KEY") or os.getenv("LLM_API_KEY"):
             from .interview import GeminiInterviewCoach
             self.interviews.coach = GeminiInterviewCoach(llm_client)
 
