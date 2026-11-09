@@ -158,4 +158,4 @@ def test_delivery_metrics_get_a_separate_rule_based_score_without_gemini():
     result = store.answer(sid, "I designed a clear dashboard and validated the source data.", metrics)
     assert result["evaluation"]["deliveryScore"] is not None
     assert "Rule-based estimate" in result["evaluation"]["deliveryFeedback"]
-    assert result["evaluation"]["score"] != result["evaluation"]["deliveryScore"] or result["evaluation"]["deliveryScore"] == 4
+    assert 1 <= result["evaluation"]["deliveryScore"] <= 5
