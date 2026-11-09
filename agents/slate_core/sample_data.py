@@ -102,6 +102,20 @@ INTERVIEW_QUESTIONS = {
         "What checks would you build to make a recurring report more reliable?",
         "Tell me about an analysis you would approach differently if you did it again."
     ],
+    "Applied Scientist": [
+        "You are given a dataset with millions of examples and noisy labels. How would you assess data quality before training a model?",
+        "How would you choose an evaluation metric for an imbalanced classification problem, and what trade-offs would you consider?",
+        "A model performs well on the training set but poorly on unseen data. How would you investigate and address the gap?",
+        "How would you design an experiment to compare a simple baseline with a more complex machine-learning model?",
+        "A research result looks promising, but the improvement is small and varies across random seeds. How would you determine whether it is reliable?",
+        "How would you detect data leakage in a machine-learning pipeline?",
+        "Describe how you would handle missing values, outliers and noisy labels in a real-world dataset.",
+        "How would you decide whether a problem needs a machine-learning model or a simpler statistical or rule-based approach?",
+        "A model has high overall accuracy but performs poorly for one important subgroup. How would you investigate this?",
+        "How would you explain a model's limitations and uncertainty to a stakeholder who wants a definitive prediction?",
+        "Tell me about a machine-learning or research problem you worked on. What hypothesis did you test, and how did you evaluate the result?",
+        "If you had one week to improve an existing model, how would you identify the highest-value experiment to run?"
+    ],
     "default": [
         "What interests you about this role, and which part of the work do you think will challenge you most?",
         "Tell me about a time you had to learn something unfamiliar to complete a task.",
