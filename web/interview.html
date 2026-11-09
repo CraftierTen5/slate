@@ -124,10 +124,29 @@ async function measureDelivery(blob,transcript){
   const duration=decoded.duration,words=(transcript.trim().match(/\b[\w'-]+\b/g)||[]).length;
   const mean=activeLevels.reduce((a,b)=>a+b,0)/Math.max(1,activeLevels.length);
   const variance=activeLevels.reduce((a,b)=>a+(b-mean)**2,0)/Math.max(1,activeLevels.length);
+  // Estimate fundamental-frequency spread locally; raw audio never leaves the browser.
+  const pitchValues=[],decimation=4,pitchRate=sr/decimation,windowSize=1024;
+  const hop=Math.floor(sr*.15);
+  for(let offset=0;offset+windowSize*decimation<samples.length&&pitchValues.length<400;offset+=hop){
+   const frameData=new Float32Array(windowSize);let avg=0;
+   for(let j=0;j<windowSize;j++){frameData[j]=samples[offset+j*decimation];avg+=frameData[j]}
+   avg/=windowSize;let energy=0;for(let j=0;j<windowSize;j++){frameData[j]-=avg;energy+=frameData[j]*frameData[j]}
+   if(energy/windowSize<.00002)continue;
+   let bestLag=0,bestCorr=0;
+   for(let lag=Math.floor(pitchRate/350);lag<=Math.floor(pitchRate/75);lag++){
+    let corr=0;for(let j=0;j<windowSize-lag;j++)corr+=frameData[j]*frameData[j+lag];
+    corr/=Math.max(1,energy);if(corr>bestCorr){bestCorr=corr;bestLag=lag}
+   }
+   if(bestLag&&bestCorr>.32)pitchValues.push(pitchRate/bestLag);
+  }
+  pitchValues.sort((a,b)=>a-b);
+  const percentile=p=>pitchValues.length?pitchValues[Math.min(pitchValues.length-1,Math.floor((pitchValues.length-1)*p))]:null;
   const fillers=(transcript.toLowerCase().match(/\b(um|uh|erm| like |you know|basically|actually)\b/g)||[]).length;
   return {durationSeconds:+duration.toFixed(1),wordsPerMinute:Math.round(words/Math.max(duration,1)*60),
    pauseRatio:+(silent/Math.max(1,levels.length)).toFixed(2),pauseCount:pauses,
-   fillerCount:fillers,meanVolume:+mean.toFixed(4),volumeVariation:+Math.sqrt(variance).toFixed(4)};
+   fillerCount:fillers,meanVolume:+mean.toFixed(4),volumeVariation:+Math.sqrt(variance).toFixed(4),
+   medianPitchHz:pitchValues.length?+percentile(.5).toFixed(1):null,
+   pitchRangeHz:pitchValues.length?+(percentile(.9)-percentile(.1)).toFixed(1):null};
  }catch(e){return null}
 }
 async function toggleCamera(){
@@ -177,7 +196,7 @@ async function finish(){
  stopDevices();
  const fb=await api("/interview/"+sid+"/feedback");$("session").classList.add("hidden");$("results").classList.remove("hidden");
  $("summary").innerHTML='<p><b>'+esc(fb.summary)+'</b></p><p>Average score: <b>'+esc(fb.averageScore)+'/5</b> · Coach: '+esc(fb.coachMode)+'</p>';
- const reviews=fb.answerReviews||[];$("details").innerHTML=reviews.map((r,i)=>'<div class="review"><b>'+esc(r.isFollowUp?"Follow-up":"Answer "+(i+1))+' · '+esc(r.score)+'/5</b><p>'+esc(r.question)+'</p><p>'+esc(r.feedback)+'</p>'+(r.strengths.length?'<p><b>Strengths:</b> '+esc(r.strengths.join("; "))+'</p>':"")+(r.improvements.length?'<p><b>Improve:</b> '+esc(r.improvements.join("; "))+'</p>':"")+'</div>').join("")+(fb.weakAreas.length?'<h3>Weak areas to revisit</h3><ul>'+fb.weakAreas.map(x=>"<li>"+esc(x)+"</li>").join("")+"</ul>":"")+(fb.strengths.length?'<h3>Strengths</h3><ul>'+fb.strengths.map(x=>"<li>"+esc(x)+"</li>").join("")+"</ul>":"")+(fb.improvements.length?'<h3>Recommended improvements</h3><ul>'+fb.improvements.map(x=>"<li>"+esc(x)+"</li>").join("")+"</ul>":"");
+ const reviews=fb.answerReviews||[];$("details").innerHTML=reviews.map((r,i)=>'<div class="review"><b>'+esc(r.isFollowUp?"Follow-up":"Answer "+(i+1))+' · '+esc(r.score)+'/5</b><p>'+esc(r.question)+'</p><p>'+esc(r.feedback)+'</p>'+(r.strengths.length?'<p><b>Strengths:</b> '+esc(r.strengths.join("; "))+'</p>':"")+(r.improvements.length?'<p><b>Improve:</b> '+esc(r.improvements.join("; "))+'</p>':"")+(r.deliveryScore?'<p><b>Voice delivery: '+esc(r.deliveryScore)+'/5</b> · '+esc(r.deliveryFeedback)+'</p>':"")+(r.deliveryImprovements?.length?'<p><b>Delivery suggestions:</b> '+esc(r.deliveryImprovements.join("; "))+'</p>':"")+'</div>').join("")+(fb.weakAreas.length?'<h3>Weak areas to revisit</h3><ul>'+fb.weakAreas.map(x=>"<li>"+esc(x)+"</li>").join("")+"</ul>":"")+(fb.strengths.length?'<h3>Strengths</h3><ul>'+fb.strengths.map(x=>"<li>"+esc(x)+"</li>").join("")+"</ul>":"")+(fb.improvements.length?'<h3>Recommended improvements</h3><ul>'+fb.improvements.map(x=>"<li>"+esc(x)+"</li>").join("")+"</ul>":"");
 }
 $("endInterview").onclick=async()=>{
  try{$("endInterview").disabled=true;msg("sessionStatus","Ending interview and preparing your report…");await stopAnswerCapture();await api("/interview/"+sid+"/end","POST",{});await finish()}
