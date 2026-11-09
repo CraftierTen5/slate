@@ -96,7 +96,7 @@ $("start").onclick=async()=>{
   const data=await api("/interview/mock","POST",{targetRole:$("role").value.trim(),mode:$("mode").value,resumeId:$("resume").value||null});
   sid=data.sessionId;$("setup").classList.add("hidden");$("session").classList.remove("hidden");$("results").classList.add("hidden");
   $("question").textContent=data.firstQuestion;$("coachMode").textContent=data.coachMode==="gemini"?"Gemini adaptive coach":"Fallback coach";
-  $("progress").textContent="Question 1";$("answer").value="";msg("sessionStatus",data.carriedFromEarlier.length?"Prior weak areas included: "+data.carriedFromEarlier.join(", "):"Interview started.");
+  $("progress").textContent="Question 1";$("answer").value="";msg("sessionStatus",data.coachError?"Gemini unavailable: "+data.coachError:(data.carriedFromEarlier.length?"Prior weak areas included: "+data.carriedFromEarlier.join(", "):"Interview started."),!!data.coachError);
   if($("mode").value==="voice"){ await prepareAudio(); speak(data.firstQuestion,beginAnswerCapture); }
  }catch(e){msg("setupStatus",e.message,true)}finally{$("start").disabled=false}
 };
