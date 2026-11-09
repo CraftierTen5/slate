@@ -1,7 +1,7 @@
 """Optional LLM adapter for tailoring and interview feedback.
 
 Not wired into tailor.py or interview.py yet: those stay deterministic by default.
-Nothing here runs without a server-side key in the LLM_API_KEY env var; no key is
+Gemini interview coaching uses GEMINI_API_KEY; Groq tailoring uses LLM_API_KEY. No key is
 ever read from or written to the client, and tests use MockLLM only.
 
 Swap points (documented in slate_core README): tailor.build_draft text generation
@@ -40,7 +40,7 @@ class MockLLM(LLMClient):
 
 
 class GeminiLLM(LLMClient):
-    """Gemini Developer API over stdlib urllib. Key comes from LLM_API_KEY."""
+    """Gemini Developer API over stdlib urllib. Key comes only from GEMINI_API_KEY."""
 
     def __init__(self, model: str = None, api_key: str = None, timeout: int = 30):
         self.model = model or os.environ.get("GEMINI_MODEL", DEFAULT_MODEL)
@@ -53,7 +53,7 @@ class GeminiLLM(LLMClient):
 
     def generate(self, prompt: str) -> str:
         if not self.api_key:
-            raise LLMError("LLM_API_KEY is not set on the server.")
+            raise LLMError("GEMINI_API_KEY is not set on the server.")
         req = urllib.request.Request(
             API_BASE.format(model=self.model),
             data=self._request_body(prompt),
