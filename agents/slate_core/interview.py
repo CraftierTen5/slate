@@ -59,6 +59,21 @@ def _question_seen(candidate, asked):
     return False
 
 
+def _role_relevant(role, question):
+    """Catch obvious cross-domain drift before a question reaches the candidate."""
+    normalized = str(role or "").lower()
+    if any(term in normalized for term in ("human", "hr", "people", "personnel")):
+        q = str(question or "").lower()
+        technical_project_terms = ("python", "sql query", "write code", "software project",
+                                   "built a project", "programming", "debugging")
+        hr_context_terms = ("employee", "hiring", "recruit", "candidate", "workplace",
+                            "manager", "conflict", "onboarding", "policy", "people",
+                            "complaint", "performance", "fairness", "team", "retention")
+        if any(term in q for term in technical_project_terms) and not any(term in q for term in hr_context_terms):
+            return False
+    return True
+
+
 def _fallback_next_question(session):
     """Select an unused prompt; after the bank, vary the scenario rather than loop."""
     asked = session.get("questions", [])
@@ -113,8 +128,9 @@ class GeminiInterviewCoach:
         )
         data = _json_object(self.client.generate(prompt))
         question = data.get("question")
-        if not isinstance(question, str) or not question.strip():
-            raise ValueError("The interview model did not provide a question.")
+        if (not isinstance(question, str) or not question.strip()
+                or not _role_relevant(role, question)):
+            raise ValueError("The interview model did not provide a role-relevant question.")
         return question.strip()[:1000]
 
     def evaluate_answer(self, role, question, answer, resume_context,
@@ -166,6 +182,10 @@ class GeminiInterviewCoach:
             delivery_score = max(1, min(5, delivery_score))
         followup = data.get("follow_up_question")
         next_question = data.get("next_question")
+        if isinstance(followup, str) and not _role_relevant(role, followup):
+            followup = None
+        if isinstance(next_question, str) and not _role_relevant(role, next_question):
+            next_question = None
         return {
             "score": score,
             "feedback": str(data.get("feedback") or "Answer evaluated.").strip()[:1200],
