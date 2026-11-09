@@ -285,16 +285,12 @@ class InterviewStore:
             feedback = ("The answer is too short to assess." if len(words) < 8 else
                         "The answer does not clearly address the key subject of the question.")
             improvements = [focus]
-        elif len(words) < 22:
-            score = 2
-            feedback = "The answer touches the question but provides too little detail to demonstrate a sound approach."
-            improvements = [focus]
         elif not has_action:
             score = 2
             feedback = "The answer mentions the topic but does not identify a concrete action or decision you took."
             improvements = ["Describe the specific action you took and why it was appropriate.", focus]
         elif not has_evidence:
-            score = 3
+            score = 2 if len(words) < 35 else 3
             feedback = "The answer identifies an action, but gives no clear evidence or outcome to show whether it worked."
             improvements = ["Add a verifiable outcome, metric, comparison or feedback that demonstrates the result.", focus]
         elif len(words) < 45:
@@ -361,7 +357,7 @@ class InterviewStore:
         for question, answer in zip(questions, answers):
             review = self._fallback_review(
                 session["role"], question, answer,
-                allow_followup=(s.get("followup_count", 0) == 0))
+                allow_followup=(session.get("followup_count", 0) == 0))
             topic = question.split(":")[0].replace("Last time this was weak", "").strip()
             review["topic"] = topic or question[:120]
             review["question"] = question
