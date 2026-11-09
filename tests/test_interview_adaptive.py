@@ -7,6 +7,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agents"))
 from slate_core.interview import InterviewStore, GeminiInterviewCoach
 from slate_core.llm import MockLLM
 from slate_core.service import SlateService
+from slate_core.ai_service import AISlateService
+from slate_core.llm import GeminiLLM
 
 
 def test_gemini_coach_parses_question_and_evaluation():
@@ -220,3 +222,48 @@ def test_interview_history_still_carries_forward_for_the_same_role():
     second = store.start("Applied Scientist", history)
     assert second["carriedFromEarlier"]
     assert "Last time this was weak:" in second["firstQuestion"]
+
+
+def test_fallback_scoring_does_not_reward_long_irrelevant_answers():
+    question = "How would you evaluate an imbalanced classification model using precision and recall?"
+    irrelevant = ("I am passionate about learning, teamwork, communication, and taking responsibility. "
+                  "I always try my best, stay positive, and work hard with everyone on the team. " * 3)
+    review = InterviewStore._fallback_review("Applied Scientist", question, irrelevant)
+    assert review["score"] == 1
+    assert "does not clearly address" in review["feedback"]
+
+
+def test_fallback_scoring_rewards_relevant_actions_and_evidence_not_length_alone():
+    question = "How would you evaluate an imbalanced classification model using precision and recall?"
+    answer = "I compared precision and recall on the validation set and chose a threshold based on false-negative cost."
+    review = InterviewStore._fallback_review("Applied Scientist", question, answer)
+    assert review["score"] == 3
+    assert "concrete action" in " ".join(review["strengths"])
+
+
+def test_interview_report_preserves_the_exact_candidate_answer():
+    store = InterviewStore()
+    sid = store.start("Data Analyst", [])["sessionId"]
+    exact_answer = "I queried the sales table, removed duplicate rows, and checked totals against the source report."
+    store.answer(sid, exact_answer)
+    report = store.end(sid)
+    assert report["answerReviews"][0]["answer"] == exact_answer
+
+
+def test_gemini_does_not_reuse_the_generic_groq_llm_api_key(monkeypatch):
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setenv("LLM_API_KEY", "groq-key-not-a-gemini-key")
+    assert GeminiLLM().api_key == ""
+
+
+def test_groq_only_configuration_does_not_enable_gemini_interview_coach(monkeypatch):
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setenv("LLM_API_KEY", "groq-key-not-a-gemini-key")
+    service = AISlateService()
+    assert service.interviews.coach is None
+
+
+def test_gemini_key_enables_interview_coach(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+    service = AISlateService()
+    assert isinstance(service.interviews.coach, GeminiInterviewCoach)
