@@ -91,7 +91,71 @@ def test_legacy_saved_interview_session_is_upgraded():
         "answers": ["short"], "carried": [],
     }
     result = store.answer("int_old", "I would inspect nulls, duplicates, and invalid types.")
-    assert result["done"] is True
+    assert result["done"] is False
+    ended = store.end("int_old")
+    assert ended["ended"] is True
     feedback = store.feedback("int_old")
     assert feedback["answeredCount"] == 2
     assert feedback["coachMode"] == "deterministic_fallback"
+
+
+def test_interview_continues_past_fallback_question_bank_until_explicit_end():
+    store = InterviewStore()
+    started = store.start("Data Analyst", [])
+    session = store._sessions[started["sessionId"]]
+    total = len(session["fallback_questions"]) + 3
+    for index in range(total):
+        result = store.answer(started["sessionId"], "I would investigate the problem, validate the data, and explain the outcome.")
+        assert result["done"] is False
+    assert store.feedback(started["sessionId"])["ended"] is False
+    final = store.end(started["sessionId"])
+    assert final["ended"] is True
+    assert final["answeredCount"] == total
+    try:
+        store.answer(started["sessionId"], "one more answer")
+        assert False, "ended interview must reject further answers"
+    except ValueError as exc:
+        assert str(exc) == "interview_ended"
+
+
+def test_interviewer_can_chain_multiple_followups():
+    class ProbingCoach:
+        def __init__(self):
+            self.count = 0
+
+        def first_question(self, role, resume, past):
+            return "Tell me about a project."
+
+        def evaluate_answer(self, role, question, answer, resume, history, followup_used, delivery_metrics=None):
+            self.count += 1
+            return {
+                "score": 3, "feedback": "Probe the detail.",
+                "strengths": [], "improvements": [],
+                "follow_up_question": f"Probe {self.count}?" if self.count < 3 else None,
+                "next_question": "How would you validate the result?",
+                "topic": "Project"
+            }
+
+    store = InterviewStore(coach=ProbingCoach())
+    sid = store.start("Data Analyst", [])["sessionId"]
+    one = store.answer(sid, "I built a dashboard.")
+    two = store.answer(sid, "I used Python.")
+    three = store.answer(sid, "I measured accuracy.")
+    assert one["isFollowUp"] is True
+    assert two["isFollowUp"] is True
+    assert three["isFollowUp"] is False
+    assert three["nextQuestion"] == "How would you validate the result?"
+
+
+def test_delivery_metrics_get_a_separate_rule_based_score_without_gemini():
+    store = InterviewStore()
+    sid = store.start("Data Analyst", [], mode="voice")["sessionId"]
+    metrics = {
+        "durationSeconds": 42.0, "wordsPerMinute": 132,
+        "pauseRatio": 0.22, "pauseCount": 3, "fillerCount": 1,
+        "meanVolume": 0.08, "volumeVariation": 0.02
+    }
+    result = store.answer(sid, "I designed a clear dashboard and validated the source data.", metrics)
+    assert result["evaluation"]["deliveryScore"] is not None
+    assert "Rule-based estimate" in result["evaluation"]["deliveryFeedback"]
+    assert result["evaluation"]["score"] != result["evaluation"]["deliveryScore"] or result["evaluation"]["deliveryScore"] == 4
