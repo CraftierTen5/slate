@@ -65,3 +65,27 @@ def test_edit_with_unsupported_claim_is_rejected_over_http(c):
     assert r.status_code == 422 and r.json()["error"]["code"] == "unsupported_claim"
     ok = c.post(f"/v1/drafts/{d}/edit", json={"coverNote": "I use Python and Git."})
     assert ok.status_code == 200
+
+def test_interview_accepts_resume_context_and_voice_mode(c):
+    rid = _rid(c)
+    started = c.post("/v1/interview/mock", json={
+        "targetRole": "Data Analyst", "mode": "voice", "resumeId": rid
+    })
+    assert started.status_code == 200
+    body = started.json()
+    assert body["mode"] == "voice"
+    assert body["sessionId"]
+    assert body["firstQuestion"]
+    assert body["coachMode"] == "deterministic_fallback"
+    answer = c.post(f"/v1/interview/{body['sessionId']}/answer",
+                    json={"text": "I used Python to clean a dataset and checked missing values."})
+    assert answer.status_code == 200
+    assert "evaluation" in answer.json()
+
+
+def test_interview_rejects_empty_answer(c):
+    sid = c.post("/v1/interview/mock",
+                 json={"targetRole": "Data Analyst"}).json()["sessionId"]
+    response = c.post(f"/v1/interview/{sid}/answer", json={"text": "   "})
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "answer_empty"
