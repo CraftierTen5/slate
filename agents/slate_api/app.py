@@ -22,6 +22,15 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel, Field, StrictBool
 
+# Load local environment files without overriding values already set by the shell.
+try:
+    from dotenv import load_dotenv
+    _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    load_dotenv(os.path.join(_ROOT, ".env"))
+    load_dotenv(os.path.join(_ROOT, "backend", ".env"))
+except ImportError:
+    pass
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from slate_core import SlateService, SlateError  # noqa: E402
 from slate_core.resume import ParseError, extract_pdf_text, MAX_PDF_BYTES  # noqa: E402
@@ -191,8 +200,10 @@ def _shell(r: APIRouter) -> FastAPI:
     async def _val(_: Request, e: RequestValidationError):
         return JSONResponse({"error": {"code": "bad_request", "message": "Request body or query is invalid."}}, status_code=422)
 
-    web = os.path.join(os.path.dirname(__file__), "..", "..", "web", "index.html")
-    web_ai = os.path.join(os.path.dirname(__file__), "..", "..", "web", "ai.html")
+    web_root = os.path.join(os.path.dirname(__file__), "..", "..", "web")
+    web = os.path.join(web_root, "index.html")
+    web_ai = os.path.join(web_root, "ai.html")
+    web_interview = os.path.join(web_root, "interview.html")
 
     @app.get("/", include_in_schema=False)
     def home():
@@ -201,6 +212,10 @@ def _shell(r: APIRouter) -> FastAPI:
     @app.get("/ai", include_in_schema=False)
     def ai_page():
         return FileResponse(web_ai) if os.path.exists(web_ai) else JSONResponse({"message": "AI demo page not found"})
+
+    @app.get("/interview", include_in_schema=False)
+    def interview_page():
+        return FileResponse(web_interview) if os.path.exists(web_interview) else JSONResponse({"message": "Interview page not found"})
 
     return app
 
