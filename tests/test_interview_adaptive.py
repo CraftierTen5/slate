@@ -81,3 +81,17 @@ def test_service_accepts_resume_context_and_voice_mode():
     session = service.interviews._sessions[started["sessionId"]]
     assert session["mode"] == "voice"
     assert "python" in session["resume_context"]["skills"]
+
+
+def test_legacy_saved_interview_session_is_upgraded():
+    store = InterviewStore()
+    store._sessions["int_old"] = {
+        "role": "Data Analyst",
+        "questions": ["Explain SQL joins.", "How do you clean data?"],
+        "answers": ["short"], "carried": [],
+    }
+    result = store.answer("int_old", "I would inspect nulls, duplicates, and invalid types.")
+    assert result["done"] is True
+    feedback = store.feedback("int_old")
+    assert feedback["answeredCount"] == 2
+    assert feedback["coachMode"] == "deterministic_fallback"
