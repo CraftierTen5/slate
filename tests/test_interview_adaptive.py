@@ -191,3 +191,32 @@ def test_fallback_question_bank_does_not_loop_after_three_questions():
         asked.append(next_question)
     assert len(set(asked)) == 16
     assert all("project you built" not in q.lower() for q in asked)
+
+
+
+def test_interview_history_is_scoped_to_the_same_role():
+    store = InterviewStore()
+    hr = store.start("Human Relations", [])
+    store.answer(hr["sessionId"], "short")
+    store.end(hr["sessionId"])
+
+    assert store.past_feedback("Applied Scientist") == []
+    assert store.past_feedback("Human Resources")
+    applied = store.start("Applied Scientist", store.past_feedback("Applied Scientist"))
+    assert "Last time this was weak" not in applied["firstQuestion"]
+    assert any(term in applied["firstQuestion"].lower()
+               for term in ("dataset", "model", "machine-learning", "machine learning", "training"))
+    assert applied["carriedFromEarlier"] == []
+
+
+def test_interview_history_still_carries_forward_for_the_same_role():
+    store = InterviewStore()
+    first = store.start("Applied Scientist", [])
+    store.answer(first["sessionId"], "short")
+    store.end(first["sessionId"])
+
+    history = store.past_feedback("Applied Scientist")
+    assert history
+    second = store.start("Applied Scientist", history)
+    assert second["carriedFromEarlier"]
+    assert "Last time this was weak:" in second["firstQuestion"]
