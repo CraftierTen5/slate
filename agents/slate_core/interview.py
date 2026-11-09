@@ -360,11 +360,12 @@ class InterviewStore:
         reviews, transcript = [], []
         for question, answer in zip(questions, answers):
             review = self._fallback_review(
-                s["role"], question, answer,
+                session["role"], question, answer,
                 allow_followup=(s.get("followup_count", 0) == 0))
             topic = question.split(":")[0].replace("Last time this was weak", "").strip()
             review["topic"] = topic or question[:120]
             review["question"] = question
+            review["answer"] = answer
             review["isFollowUp"] = False
             reviews.append(review)
             transcript.append({"question": question, "answer": answer, "isFollowUp": False})
@@ -376,6 +377,7 @@ class InterviewStore:
             "followup_used": False, "transcript": transcript, "reviews": reviews,
             "resume_context": {}, "mode": "text", "ai_powered": False,
             "model_turns": 0, "fallback_turns": len(answers),
+            "coach_error": "This saved interview predates Gemini diagnostics; its original provider error is unavailable.",
             "done": len(answers) >= len(questions),
         })
 
