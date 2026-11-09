@@ -19,3 +19,37 @@ Python + LangGraph agents, FastAPI backend, PostgreSQL. Next.js + TypeScript web
 ## Workflow
 
 Initial project setup lands on `main` once. After that, every change is a branch, then a pull request; the repo owner reviews and merges.
+
+## Local mock interview
+
+The dedicated interview screen is served by the existing FastAPI app at
+`/interview`; it uses the same authenticated, per-user resume store as the
+classic Slate page. It supports typed answers and browser speech-to-text
+(Chrome/Edge support varies by platform and microphone permission). Speech
+synthesis reads questions aloud where the browser supports it.
+
+The interview coach uses the existing `GeminiLLM` adapter. Set
+`GEMINI_API_KEY` in the repository-root `.env` file (copy
+`.env.example`); `GEMINI_MODEL` defaults to `gemini-3.8-flash`.
+The API key stays on the server. Without a working Gemini key or when a model
+call fails, the interview continues with deterministic fallback evaluation.
+Feedback labels whether the session used Gemini, fallback, or a mixture.
+
+For a local-only sign-in, `SLATE_DEV_AUTH=1` is also in the example env file.
+This must never be enabled on a public deployment. The optional
+`SLATE_STATE_URL=sqlite:///slate_state.db` keeps user data across restarts;
+without it the memory store is ephemeral.
+
+On Windows PowerShell, from the repository root:
+
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r backend\requirements.txt
+Copy-Item .env.example .env
+# Edit .env and add your Gemini API key.
+uvicorn slate_api.app:app --app-dir agents --reload
+```
+
+Open `http://127.0.0.1:8000/interview` to go straight to the interview, or
+`http://127.0.0.1:8000` for the full Slate page. Keep the terminal running.
