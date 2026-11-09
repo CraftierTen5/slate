@@ -159,3 +159,5 @@ def test_delivery_metrics_get_a_separate_rule_based_score_without_gemini():
     assert result["evaluation"]["deliveryScore"] is not None
     assert "Rule-based estimate" in result["evaluation"]["deliveryFeedback"]
     assert 1 <= result["evaluation"]["deliveryScore"] <= 5
+    report = store.end(sid)
+    assert report["averageDeliveryScore"] == result["evaluation"]["deliveryScore"]
