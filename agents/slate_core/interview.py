@@ -31,11 +31,22 @@ def _strings(value, limit=5):
             if isinstance(item, (str, int, float)) and str(item).strip()][:limit]
 
 
+def _role_key(role):
+    """Canonical role identity used to keep coaching history within one role."""
+    normalized = re.sub(r"[^a-z0-9]+", " ", str(role or "").lower()).strip()
+    aliases = {
+        "hr": "human resources", "human relation": "human resources",
+        "human relations": "human resources", "human resource": "human resources",
+        "human resources": "human resources", "hr generalist": "human resources",
+        "hr executive": "human resources", "human resource management": "human resources",
+    }
+    return aliases.get(normalized, normalized)
+
+
 def _role_questions(role):
     """Resolve common role-name variants without silently treating HR as a tech role."""
-    normalized = re.sub(r"[^a-z0-9]+", " ", str(role or "").lower()).strip()
-    if normalized in {"hr", "human relations", "human resource", "human resources",
-                      "hr generalist", "hr executive", "human resource management"}:
+    normalized = _role_key(role)
+    if normalized == "human resources":
         return list(INTERVIEW_QUESTIONS["Human Resources"])
     for key, questions in INTERVIEW_QUESTIONS.items():
         if key == "default":
@@ -503,5 +514,10 @@ class InterviewStore:
         s["feedback"] = fb
         return fb
 
-    def past_feedback(self) -> list:
-        return [s["feedback"] for s in self._sessions.values() if "feedback" in s]
+    def past_feedback(self, role=None) -> list:
+        """Return coaching history only from the same target role."""
+        target = _role_key(role) if role else None
+        return [
+            s["feedback"] for s in self._sessions.values()
+            if "feedback" in s and (target is None or _role_key(s.get("role")) == target)
+        ]
