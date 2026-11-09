@@ -26,7 +26,22 @@ The dedicated interview screen is served by the existing FastAPI app at
 `/interview`; it uses the same authenticated, per-user resume store as the
 classic Slate page. It supports typed answers and browser speech-to-text
 (Chrome/Edge support varies by platform and microphone permission). Speech
-synthesis reads questions aloud where the browser supports it.
+synthesis reads questions aloud where the browser supports it. Interviews are
+continuous: Gemini can ask chained, contextual follow-ups and the session only
+ends when the candidate selects **End interview**.
+
+Voice mode records each answer locally in the browser and derives delivery
+signals (speaking rate, pauses, filler words, volume variation and an estimated
+pitch range). Only bounded numeric metrics are sent to the API with the answer;
+raw audio is not uploaded or retained. Gemini can score answer content and
+delivery separately. If Gemini is unavailable, delivery feedback is a clearly
+labeled rule-based estimate. These are communication-coaching signals, not
+personality, emotion, honesty or hiring-suitability assessments.
+
+The optional webcam control provides a live, local self-preview. Video is not
+uploaded, recorded or used for automated face/emotion analysis. Camera permission
+is independent from microphone permission; the interview can continue without
+either device.
 
 The interview coach uses the existing `GeminiLLM` adapter. Set
 `GEMINI_API_KEY` in the repository-root `.env` file (copy
